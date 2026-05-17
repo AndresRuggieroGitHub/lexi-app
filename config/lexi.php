@@ -1,0 +1,45 @@
+<?php
+
+return [
+    'cefr_levels' => ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'],
+    'ui_locales' => [
+        'ar', 'bg', 'cs', 'de', 'dk',
+        'en', 'es', 'fi', 'fr', 'gr',
+        'he', 'hi', 'hu', 'id', 'it',
+        'ja', 'ko', 'nl', 'no', 'pl',
+        'pt', 'ro', 'ru', 'sk', 'sv',
+        'th', 'tr', 'ua', 'vi', 'zh',
+    ],
+    'ui_locale_translation_map' => [
+        'dk' => 'da',
+        'gr' => 'el',
+        'ua' => 'uk',
+        'zh' => 'zh-CN',
+    ],
+    'ui_locale_carbon_map' => [
+        'dk' => 'da',
+        'gr' => 'el',
+        'ua' => 'uk',
+        'zh' => 'zh_CN',
+    ],
+    'catalog_topics' => [
+        ['value' => 'travel', 'label' => '✈ Viajes'],
+        ['value' => 'food', 'label' => '🍽 Gastronomía'],
+        ['value' => 'work', 'label' => '💼 Trabajo'],
+        ['value' => 'business', 'label' => '📈 Negocios'],
+        ['value' => 'education', 'label' => '🎓 Educación'],
+        ['value' => 'health', 'label' => '🏥 Salud'],
+        ['value' => 'science', 'label' => '🔬 Ciencia'],
+        ['value' => 'technology', 'label' => '💻 Tecnología'],
+        ['value' => 'culture', 'label' => '🎭 Cultura'],
+        ['value' => 'social', 'label' => '🤝 Social'],
+        ['value' => 'home', 'label' => '🏠 Hogar'],
+        ['value' => 'nature', 'label' => '🌿 Naturaleza'],
+        ['value' => 'politics', 'label' => '🏛 Política'],
+        ['value' => 'sport', 'label' => '⚽ Deporte'],
+        ['value' => 'art', 'label' => '🎨 Arte'],
+        ['value' => 'media', 'label' => '📺 Medios'],
+        ['value' => 'law', 'label' => '⚖ Derecho'],
+        ['value' => 'finance', 'label' => '💰 Finanzas'],
+    ],
+];

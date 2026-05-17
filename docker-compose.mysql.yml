@@ -1,0 +1,27 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: lexi-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: lexi
+      MYSQL_USER: lexi
+      MYSQL_PASSWORD: lexi
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - lexi_mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+
+  adminer:
+    image: adminer:4
+    container_name: lexi-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+
+volumes:
+  lexi_mysql_data:
