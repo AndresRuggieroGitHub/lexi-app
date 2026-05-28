@@ -71,6 +71,7 @@
             <span class="file-drop-text">{{ __('lexi.library.drag_file') }}</span>
             <button id="chooseFileBtn" class="file-drop-btn" type="button">{{ __('lexi.library.browse_file') }}</button>
             <span id="fileNameDisplay" class="file-drop-name"></span>
+            <span class="file-drop-hint">Solo 1 archivo por importación (.txt o .csv).</span>
           </div>
           <button id="importFileBtn" class="btn btn-primary btn-sm w-100" type="button">{{ __('lexi.library.import_file') }}</button>
         </div>

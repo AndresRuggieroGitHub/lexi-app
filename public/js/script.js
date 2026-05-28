@@ -1768,6 +1768,18 @@
         });
     };
 
+    const renderSelectedFile = (file) => {
+      if (!fileNameDisplay) return;
+
+      const name = file?.name ? String(file.name) : "";
+      fileNameDisplay.textContent = name ? `Archivo seleccionado: ${name}` : "";
+      fileNameDisplay.title = name;
+
+      if (dropZone) {
+        dropZone.classList.toggle("has-file", Boolean(name));
+      }
+    };
+
     // ── Import destination modal ──────────────────────────────────────────
     const openImportDestinationModal = (words, onCompleted) => {
       const modal          = document.getElementById("importCatalogModal");
@@ -1922,7 +1934,7 @@
       }
       if (fileInput && fileNameDisplay) {
         fileInput.addEventListener("change", () => {
-          fileNameDisplay.textContent = fileInput.files[0]?.name ?? "";
+          renderSelectedFile(fileInput.files?.[0] || null);
         });
       }
       if (dropZone) {
@@ -1936,7 +1948,7 @@
             const dt = new DataTransfer();
             dt.items.add(file);
             fileInput.files = dt.files;
-            fileNameDisplay.textContent = file.name;
+            renderSelectedFile(file);
           }
         });
       }
@@ -1953,7 +1965,10 @@
             showAlert("El archivo no contiene palabras.", "warning");
             return;
           }
-          openImportDestinationModal(words, () => { fileInput.value = ""; if (fileNameDisplay) fileNameDisplay.textContent = ""; });
+          openImportDestinationModal(words, () => {
+            fileInput.value = "";
+            renderSelectedFile(null);
+          });
         };
         reader.readAsText(file);
       });
