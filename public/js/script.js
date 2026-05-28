@@ -1754,51 +1754,167 @@
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "");
 
-    const parseWords = (text) =>
-      String(text || "")
+    const parseWords = (text) => {
+      const seen = new Set();
+      return String(text || "")
         .split(/[\n,;\t]+/)
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0);
-
-    const addWords = (words, language = "en") => {
-      const saved = getLibrary();
-      const seen = new Set(saved.map((item) => normalize(item.label)));
-      let added = 0;
-      const importedEntries = [];
-
-      words.forEach((rawLabel) => {
-        const label = rawLabel.trim();
-        const key = normalize(label);
-        if (!key || seen.has(key)) return;
-
-        const suffix = key.replace(/[^a-z0-9]+/g, "-") || Array.from(label).map((char) => char.charCodeAt(0).toString(16)).join("").slice(0, 24);
-        const clientKey = `custom-${language}-${suffix}`;
-
-        saved.push({
-          id: clientKey,
-          label,
-          language,
-          translation: "",
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .filter((s) => {
+          const k = normalize(s);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
         });
-        importedEntries.push({ client_key: clientKey, label });
-        seen.add(key);
-        added += 1;
-      });
+    };
 
-      saveLibrary(saved);
+    // ── Import destination modal ──────────────────────────────────────────
+    const openImportDestinationModal = (words, onCompleted) => {
+      const modal          = document.getElementById("importCatalogModal");
+      const collsDivider   = document.getElementById("importDestCollsDivider");
+      const collsList      = document.getElementById("importDestColls");
+      const newBtn         = document.getElementById("importDestNewBtn");
+      const newWrap        = document.getElementById("importDestNewWrap");
+      const newInput       = document.getElementById("importDestNewInput");
+      const summary        = document.getElementById("importDestSummary");
+      const confirmBtn     = document.getElementById("importCatalogConfirm");
+      const cancelBtn      = document.getElementById("importCatalogCancel");
 
-      if (hasServerLibrary && importedEntries.length) {
-        libraryApiFetch("/api/library/import", {
-          method: "POST",
-          body: JSON.stringify({ language, entries: importedEntries }),
-        })
-          .then((response) => response.ok ? response.json() : Promise.reject(response))
-          .then((payload) => syncServerLibrary(payload.items || []))
-          .catch(() => loadServerLibrary());
+      if (!modal || !collsDivider || !collsList || !newBtn || !newWrap || !newInput || !summary || !confirmBtn || !cancelBtn) {
+        return;
       }
 
-      return added;
+      const language           = getActiveLang();
+      const languageCollections = getCollections().filter((c) => c.lang === language);
+      const selectedIds        = new Set();
+      newInput.value           = "";
+      newWrap.hidden           = true;
+      summary.textContent      = `Se detectaron ${words.length} palabra${words.length !== 1 ? "s" : ""} únicas para buscar en el catálogo.`;
+
+      const renderColls = () => {
+        const hasColls = languageCollections.length > 0;
+        collsDivider.hidden = !hasColls;
+        collsList.hidden    = !hasColls;
+        if (!hasColls) { collsList.innerHTML = ""; return; }
+
+        collsList.innerHTML = languageCollections.map((c) => {
+          const collId = String(c.id);
+          const sel = selectedIds.has(collId);
+          return `<li>
+            <button class="save-dropdown-item${sel ? " is-selected" : ""}" type="button"
+                    data-icoll="${collId}" aria-pressed="${sel}">
+              <span class="save-dropdown-item-name">${escapeHtml(c.name)}</span>
+              <span class="save-dropdown-item-status" aria-hidden="true">
+                <i class="bi ${sel ? "bi-check2" : "bi-plus-lg"}"></i>
+              </span>
+            </button>
+          </li>`;
+        }).join("");
+
+        collsList.querySelectorAll("[data-icoll]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const id = btn.dataset.icoll;
+            selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
+            renderColls();
+          });
+        });
+      };
+
+      renderColls();
+      modal.hidden = false;
+
+      const close = () => {
+        modal.hidden = true;
+        confirmBtn.disabled = false;
+        confirmBtn.removeEventListener("click", onConfirm);
+        cancelBtn.removeEventListener("click", close);
+        newBtn.removeEventListener("click", onNewBtn);
+        modal.removeEventListener("click", onBackdrop);
+        document.removeEventListener("keydown", onKey);
+      };
+
+      const onKey      = (e) => { if (e.key === "Escape") close(); };
+      const onBackdrop = (e) => { if (e.target === modal) close(); };
+
+      const onNewBtn = () => {
+        newWrap.hidden = !newWrap.hidden;
+        if (!newWrap.hidden) newInput.focus();
+      };
+
+      const onConfirm = () => {
+        const newName = newInput.value.trim();
+
+        confirmBtn.disabled = true;
+
+        const payload = {
+          language,
+          entries: words.map((label) => ({ label })),
+        };
+
+        if (selectedIds.size > 0) {
+          payload.collection_ids = Array.from(selectedIds);
+        }
+        if (newName) {
+          payload.new_collection_name = newName;
+        }
+
+        libraryApiFetch("/api/library/import", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        })
+          .then(async (r) => {
+            const contentType = (r.headers.get("content-type") || "").toLowerCase();
+
+            if (!r.ok) {
+              let message = "";
+              if (contentType.includes("application/json")) {
+                const err = await r.json().catch(() => null);
+                message =
+                  err?.message
+                  || (err?.errors
+                    ? Object.values(err.errors).flat().find(Boolean)
+                    : "");
+              }
+
+              if (!message && (r.status === 401 || r.status === 403 || r.status === 419)) {
+                message = "Tu sesión ha caducado. Vuelve a iniciar sesión.";
+              }
+
+              throw new Error(message || "Error al importar. Inténtalo de nuevo.");
+            }
+
+            if (!contentType.includes("application/json")) {
+              throw new Error("La sesión no está activa. Inicia sesión y vuelve a intentarlo.");
+            }
+
+            return r.json();
+          })
+          .then((data) => {
+            const s = data.import_summary || {};
+            const matched = s.matched_count ?? 0;
+            const skipped = s.skipped_count ?? 0;
+            const msg = matched > 0
+              ? `${matched} palabra${matched !== 1 ? "s" : ""} importada${matched !== 1 ? "s" : ""}${skipped > 0 ? `. ${skipped} no encontrada${skipped !== 1 ? "s" : ""} en el catálogo.` : "."}`
+              : "Ninguna palabra encontrada en el catálogo.";
+            showAlert(msg, matched > 0 ? "success" : "warning");
+            syncServerLibraryState(data || {});
+            window.dispatchEvent(new Event("lexi-library-updated"));
+            if (typeof onCompleted === "function") onCompleted(data);
+            close();
+          })
+          .catch((err) => {
+            confirmBtn.disabled = false;
+            showAlert(err?.message || "Error al importar. Inténtalo de nuevo.", "danger");
+          });
+      };
+
+      newBtn.addEventListener("click", onNewBtn);
+      confirmBtn.addEventListener("click", onConfirm);
+      cancelBtn.addEventListener("click", close);
+      modal.addEventListener("click", onBackdrop);
+      document.addEventListener("keydown", onKey);
     };
+    // ─────────────────────────────────────────────────────────────────────
 
     if (importFileBtn && fileInput) {
       if (chooseFileBtn) {
@@ -1830,13 +1946,14 @@
           showAlert(t("js.library.select_file_first"), "warning");
           return;
         }
-
         const reader = new FileReader();
         reader.onload = () => {
           const words = parseWords(reader.result);
-          const added = addWords(words, getActiveLang());
-          showAlert(t(added === 1 ? "js.library.imported_words_one" : "js.library.imported_words_other", { count: added }), added ? "success" : "warning");
-          window.dispatchEvent(new Event("lexi-library-updated"));
+          if (!words.length) {
+            showAlert("El archivo no contiene palabras.", "warning");
+            return;
+          }
+          openImportDestinationModal(words, () => { fileInput.value = ""; if (fileNameDisplay) fileNameDisplay.textContent = ""; });
         };
         reader.readAsText(file);
       });
@@ -1845,10 +1962,11 @@
     if (importPasteBtn && pasteInput) {
       importPasteBtn.addEventListener("click", () => {
         const words = parseWords(pasteInput.value);
-        const added = addWords(words, getActiveLang());
-        showAlert(t(added === 1 ? "js.library.imported_words_one" : "js.library.imported_words_other", { count: added }), added ? "success" : "warning");
-        if (added) pasteInput.value = "";
-        window.dispatchEvent(new Event("lexi-library-updated"));
+        if (!words.length) {
+          showAlert("Escribe o pega al menos una palabra.", "warning");
+          return;
+        }
+        openImportDestinationModal(words, () => { pasteInput.value = ""; });
       });
     }
   };

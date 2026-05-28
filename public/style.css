@@ -4428,3 +4428,63 @@ body.profile-modal-open {
   background: transparent;
   opacity: 0.72;
 }
+
+/* ===== IMPORT DESTINATION PICKER ===== */
+.import-dest-picker {
+  display: flex;
+  flex-direction: column;
+}
+
+.import-dest-main-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.68rem 0.04rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  cursor: default;
+  user-select: none;
+  border-bottom: 1px solid #f1f1f4;
+}
+
+.import-dest-main-label {
+  font-weight: 600;
+}
+
+.import-dest-main-check {
+  color: #a78bfa;
+  font-size: 1rem;
+}
+
+.import-dest-divider {
+  height: 1px;
+  background: #ededf2;
+  margin: 0.62rem 0 0.48rem;
+}
+
+.import-dest-colls {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Selected state for collections in import modal */
+.save-dropdown-item.is-selected {
+  color: #4f46e5;
+  font-weight: 600;
+  background: none;
+  opacity: 1;
+}
+
+.save-dropdown-item.is-selected .save-dropdown-item-status {
+  color: #4f46e5;
+  font-size: 1.1rem;
+  opacity: 1;
+}
+
+/* Indigo tint on icon for import modal */
+#importCatalogModal .lexi-modal-icon--brand {
+  background: #eef2ff;
+  color: #4f46e5;
+  border-color: #c7d2fe;
+}

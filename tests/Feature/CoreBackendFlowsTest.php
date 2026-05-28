@@ -1318,4 +1318,114 @@ PHP);
             ['code' => 'zh', 'name' => 'Chino', 'created_at' => now(), 'updated_at' => now()],
         ]);
     }
+
+    // ── Import: catalog-only ──────────────────────────────────────────────
+
+    public function test_library_import_only_saves_words_that_exist_in_catalog_for_selected_language(): void
+    {
+        $user = User::factory()->create();
+
+        // Seed one catalog word (seedv4-) and ensure language exists
+        DB::table('languages')->insertOrIgnore([['code' => 'en', 'name' => 'English', 'created_at' => now(), 'updated_at' => now()]]);
+
+        $catWordId = DB::table('words')->insertGetId([
+            'client_key'    => 'seedv4-en-apple',
+            'text'          => 'apple',
+            'language_code' => 'en',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/api/library/import', [
+            'language' => 'en',
+            'entries'  => [
+                ['label' => 'apple'],        // exists in catalog → should be saved
+                ['label' => 'unicornword'],   // not in catalog → should be skipped
+            ],
+        ]);
+
+        $response->assertOk();
+        $summary = $response->json('import_summary');
+        $this->assertSame(1, $summary['matched_count']);
+        $this->assertSame(1, $summary['skipped_count']);
+
+        $this->assertDatabaseHas('user_words', ['user_id' => $user->id, 'word_id' => $catWordId]);
+    }
+
+    public function test_library_import_can_create_destination_collection_and_attach_matched_catalog_words(): void
+    {
+        $user = User::factory()->create();
+
+        DB::table('languages')->insertOrIgnore([['code' => 'en', 'name' => 'English', 'created_at' => now(), 'updated_at' => now()]]);
+
+        $wordId = DB::table('words')->insertGetId([
+            'client_key'    => 'seedv4-en-book',
+            'text'          => 'book',
+            'language_code' => 'en',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/api/library/import', [
+            'language'            => 'en',
+            'entries'             => [['label' => 'book']],
+            'new_collection_name' => 'My Words',
+        ]);
+
+        $response->assertOk();
+        $this->assertSame(1, $response->json('import_summary.matched_count'));
+
+        $collId = DB::table('collections')
+            ->where('user_id', $user->id)
+            ->where('name', 'My Words')
+            ->value('id');
+
+        $this->assertNotNull($collId, 'Nueva colección no fue creada.');
+
+        $this->assertDatabaseHas('collection_words', ['collection_id' => $collId, 'word_id' => $wordId]);
+    }
+
+    public function test_library_import_can_attach_words_to_multiple_collections_at_once(): void
+    {
+        $user = User::factory()->create();
+
+        DB::table('languages')->insertOrIgnore([['code' => 'en', 'name' => 'English', 'created_at' => now(), 'updated_at' => now()]]);
+
+        $wordId = DB::table('words')->insertGetId([
+            'client_key'    => 'seedv4-en-cat',
+            'text'          => 'cat',
+            'language_code' => 'en',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        $coll1 = DB::table('collections')->insertGetId([
+            'user_id'       => $user->id,
+            'language_code' => 'en',
+            'name'          => 'Animals',
+            'is_default'    => false,
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        $coll2 = DB::table('collections')->insertGetId([
+            'user_id'       => $user->id,
+            'language_code' => 'en',
+            'name'          => 'Favorites',
+            'is_default'    => false,
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/api/library/import', [
+            'language'       => 'en',
+            'entries'        => [['label' => 'cat']],
+            'collection_ids' => [$coll1, $coll2],
+        ]);
+
+        $response->assertOk();
+        $this->assertSame(1, $response->json('import_summary.matched_count'));
+        $this->assertDatabaseHas('collection_words', ['collection_id' => $coll1, 'word_id' => $wordId]);
+        $this->assertDatabaseHas('collection_words', ['collection_id' => $coll2, 'word_id' => $wordId]);
+    }
 }

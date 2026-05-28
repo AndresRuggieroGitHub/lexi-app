@@ -1257,3 +1257,41 @@
     </div>
   </div>
 </div>
+
+<div id="importCatalogModal" class="lexi-modal-backdrop" hidden>
+  <div class="lexi-modal" role="dialog" aria-modal="true" aria-labelledby="importCatalogModalTitle">
+    <div class="lexi-modal-header">
+      <div class="lexi-modal-icon lexi-modal-icon--brand"><i class="bi bi-journals"></i></div>
+      <p class="lexi-modal-title" id="importCatalogModalTitle">Importar desde catálogo</p>
+      <p class="lexi-modal-body">Solo se guardarán las palabras que ya existan en el catálogo del idioma activo.</p>
+    </div>
+
+    <div class="import-dest-picker">
+      {{-- Fila fija: Guardado --}}
+      <div class="import-dest-main-row">
+        <span class="import-dest-main-label">Guardado</span>
+        <span class="import-dest-main-check" aria-hidden="true"><i class="bi bi-bookmark-fill"></i></span>
+      </div>
+
+      {{-- Colecciones existentes (multi-select) --}}
+      <div id="importDestCollsDivider" class="import-dest-divider" hidden></div>
+      <ul id="importDestColls" class="import-dest-colls" hidden></ul>
+
+      {{-- Nueva colección --}}
+      <div class="import-dest-divider"></div>
+      <button type="button" class="save-dropdown-new-btn" id="importDestNewBtn">
+        <i class="bi bi-plus-circle"></i> Nueva colección
+      </button>
+      <div id="importDestNewWrap" hidden style="margin-top:0.6rem;">
+        <input type="text" id="importDestNewInput" class="lexi-modal-input" maxlength="120" placeholder="Nombre de la colección" style="margin-bottom:0;" />
+      </div>
+
+      <p class="lexi-modal-body" id="importDestSummary" style="margin-top:0.75rem;"></p>
+    </div>
+
+    <div class="lexi-modal-actions" style="margin-top:1.25rem;">
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="importCatalogCancel">Cancelar</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--primary" id="importCatalogConfirm"><i class="bi bi-check2"></i> Importar</button>
+    </div>
+  </div>
+</div>

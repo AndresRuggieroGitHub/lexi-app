@@ -92,26 +92,109 @@ class LibraryController extends Controller
     public function import(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'language' => ['required', Rule::exists('languages', 'code')],
-            'entries' => ['required', 'array', 'min:1'],
-            'entries.*.client_key' => ['required', 'string', 'max:120'],
-            'entries.*.label' => ['required', 'string', 'max:255'],
+            'language'            => ['required', Rule::exists('languages', 'code')],
+            'entries'             => ['required', 'array', 'min:1'],
+            'entries.*.label'     => ['required', 'string', 'max:255'],
+            'collection_ids'      => ['nullable', 'array'],
+            'collection_ids.*'    => ['integer'],
+            'new_collection_name' => ['nullable', 'string', 'max:120'],
         ]);
 
-        DB::transaction(function () use ($request, $validated) {
-            foreach ($validated['entries'] as $entry) {
-                $word = $this->upsertWord($entry['client_key'], $entry['label'], $validated['language']);
+        $normalize = static function (string $v): string {
+            $value = trim($v);
 
-                UserWord::query()->updateOrCreate(
-                    ['user_id' => $request->user()->id, 'word_id' => $word->id],
-                    ['last_seen_at' => now()]
-                );
+            if (class_exists('Normalizer')) {
+                $value = \Normalizer::normalize($value, \Normalizer::NFD) ?: $value;
             }
-        });
+
+            $value = preg_replace('/[\x{0300}-\x{036f}]/u', '', $value);
+
+            return mb_strtolower(preg_replace('/\s+/', ' ', trim($value)));
+        };
+
+        $inputLabels = collect($validated['entries'])
+            ->pluck('label')
+            ->map(static fn ($l) => trim((string) $l))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $normalizedToInput = $inputLabels->mapWithKeys(
+            static fn ($label) => [$normalize($label) => $label]
+        );
+
+        $matchedWords = Word::query()
+            ->where('language_code', $validated['language'])
+            ->get()
+            ->filter(static fn (Word $w) => $normalizedToInput->has($normalize($w->text)));
+
+        $matchedWordIds  = $matchedWords->pluck('id')->all();
+        $matchedLabels   = $matchedWords->pluck('text')->all();
+        $skippedLabels   = $normalizedToInput->values()
+            ->diff(collect($matchedLabels)->map($normalize))
+            ->values()->all();
+
+        // Resolve collections
+        $collections = [];
+        foreach (array_unique(array_map('intval', $validated['collection_ids'] ?? [])) as $cid) {
+            $coll = UserCollection::query()
+                ->where('user_id', $request->user()->id)
+                ->where('language_code', $validated['language'])
+                ->find($cid);
+            if (! $coll) {
+                throw ValidationException::withMessages(['collection_ids' => 'Una colección no existe para este idioma.']);
+            }
+            $collections[] = $coll;
+        }
+
+        $newName = trim((string) ($validated['new_collection_name'] ?? ''));
+        if ($newName !== '') {
+            $this->ensureUniqueCollectionName($request->user()->id, $validated['language'], $newName);
+            try {
+                $collections[] = UserCollection::query()->create([
+                    'user_id'       => $request->user()->id,
+                    'language_code' => $validated['language'],
+                    'name'          => $newName,
+                    'is_default'    => false,
+                ]);
+            } catch (QueryException $e) {
+                $this->throwIfDuplicateCollectionName($e);
+                throw $e;
+            }
+        }
+
+        $matchedCount = count($matchedWordIds);
+
+        if ($matchedCount > 0) {
+            DB::transaction(function () use ($request, $validated, $matchedWordIds, $collections): void {
+                $upsertRows = array_map(static fn ($wid) => [
+                    'user_id'     => $request->user()->id,
+                    'word_id'     => $wid,
+                    'updated_at'  => now(),
+                    'last_seen_at' => now(),
+                ], $matchedWordIds);
+
+                UserWord::query()->upsert(
+                    $upsertRows,
+                    ['user_id', 'word_id'],
+                    ['updated_at', 'last_seen_at']
+                );
+
+                foreach ($collections as $coll) {
+                    $coll->words()->syncWithoutDetaching($matchedWordIds);
+                }
+            });
+        }
 
         return response()->json([
-            'items' => $this->libraryItems($request->user(), $validated['language']),
+            'items'       => $this->libraryItems($request->user(), $validated['language']),
             'collections' => $this->collectionItems($request->user(), $validated['language']),
+            'import_summary' => [
+                'matched_count'       => $matchedCount,
+                'skipped_count'       => count($skippedLabels),
+                'skipped_labels'      => array_slice($skippedLabels, 0, 25),
+                'target_collection_ids' => array_map(static fn ($c) => $c->id, $collections),
+            ],
         ]);
     }
 
