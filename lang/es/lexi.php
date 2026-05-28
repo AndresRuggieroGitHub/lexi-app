@@ -1206,6 +1206,7 @@ return [
         ],
     ],
     'categories' => [
+        'general' => 'General',
         'work' => 'Trabajo',
         'business' => 'Negocios',
         'education' => 'Educación',
@@ -1220,6 +1221,7 @@ return [
         'social' => 'Social',
     ],
     'topics' => [
+        'general' => 'General',
         'work' => 'Trabajo',
         'business' => 'Negocios',
         'education' => 'Educación',

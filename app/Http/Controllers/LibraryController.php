@@ -312,6 +312,7 @@ class LibraryController extends Controller
     {
         $query = Word::query()
             ->with(['category', 'translations.targetWord'])
+            ->where('client_key', 'like', 'seedv4-%')
             ->orderBy('text');
 
         if ($language) {
@@ -335,7 +336,7 @@ class LibraryController extends Controller
             'id' => $word->client_key ?: 'word-' . $word->id,
             'label' => $word->text,
             'language' => $word->language_code,
-            'translation' => $preferredTranslation?->targetWord?->text ?? $word->translations->first()?->targetWord?->text,
+            'translation' => $preferredTranslation?->targetWord?->text,
             'cefr' => $word->cefr_level,
             'topic' => $word->category?->name,
         ];

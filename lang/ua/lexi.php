@@ -1206,6 +1206,7 @@ return [
         ],
     ],
     'categories' => [
+        'general' => 'Загальне',
         'work' => 'Робота',
         'business' => 'Бізнес',
         'education' => 'Освіта',
@@ -1220,6 +1221,7 @@ return [
         'social' => 'Соціальне',
     ],
     'topics' => [
+        'general' => 'Загальне',
         'work' => 'Робота',
         'business' => 'Бізнес',
         'education' => 'Освіта',

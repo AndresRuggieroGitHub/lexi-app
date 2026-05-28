@@ -3576,6 +3576,32 @@ iframe {
   gap: 0.25rem;
 }
 
+.profile-native-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  background: var(--surface);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.profile-native-pill img {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-native-pill--locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 600px) {
   .utility-drawer-section--mobile-nav {

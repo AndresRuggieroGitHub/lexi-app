@@ -69,8 +69,15 @@ class ProfileController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+        $requestedLanguage = $validated['language_code'];
 
-        DB::transaction(function () use ($user, $validated) {
+        if (! $this->canActivateLanguage($user, $requestedLanguage)) {
+            return response()->json([
+                'message' => __('lexi.js.change_language_error'),
+            ], 422);
+        }
+
+        DB::transaction(function () use ($user, $requestedLanguage) {
             UserLanguage::query()
                 ->where('user_id', $user->id)
                 ->update([
@@ -80,7 +87,7 @@ class ProfileController extends Controller
 
             $userLanguage = UserLanguage::query()->firstOrNew([
                 'user_id' => $user->id,
-                'language_code' => $validated['language_code'],
+                'language_code' => $requestedLanguage,
             ]);
 
             if (! $userLanguage->exists) {
@@ -92,6 +99,52 @@ class ProfileController extends Controller
         });
 
         return $this->sessionState($request);
+    }
+
+    private function canActivateLanguage(User $user, string $languageCode): bool
+    {
+        $hasCatalogWords = DB::table('words')
+            ->where('language_code', $languageCode)
+            ->where(function ($query): void {
+                $query->where('client_key', 'like', 'seedv4-%')
+                    ->orWhere('client_key', 'like', 'seedv3-%')
+                    ->orWhere('client_key', 'like', 'seedv2-%')
+                    ->orWhere('client_key', 'like', 'seed-%')
+                    ->orWhere('client_key', 'like', 'imp-%');
+            })
+            ->exists();
+
+        if ($hasCatalogWords) {
+            return true;
+        }
+
+        if ($user->userLanguages()->where('language_code', $languageCode)->exists()) {
+            return true;
+        }
+
+        $hasSavedWords = DB::table('user_words')
+            ->join('words', 'words.id', '=', 'user_words.word_id')
+            ->where('user_words.user_id', $user->id)
+            ->where('words.language_code', $languageCode)
+            ->exists();
+
+        if ($hasSavedWords) {
+            return true;
+        }
+
+        $hasCollections = DB::table('collections')
+            ->where('user_id', $user->id)
+            ->where('language_code', $languageCode)
+            ->exists();
+
+        if ($hasCollections) {
+            return true;
+        }
+
+        return DB::table('exercise_instances')
+            ->where('user_id', $user->id)
+            ->where('assigned_language_code', $languageCode)
+            ->exists();
     }
 
     public function destroy(Request $request)
