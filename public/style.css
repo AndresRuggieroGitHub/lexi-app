@@ -3560,11 +3560,15 @@ iframe {
 }
 
 .profile-studied-left img {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .profile-studied-badge {
@@ -3589,10 +3593,20 @@ iframe {
 }
 
 .profile-native-pill img {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   object-fit: cover;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.profile-native-lock-icon {
+  font-size: 1.25rem;
+  color: var(--muted);
+  line-height: 1;
 }
 
 .profile-native-pill--locked {
@@ -3602,8 +3616,69 @@ iframe {
   filter: grayscale(0.4);
 }
 
+body.profile-modal-open {
+  overflow: hidden;
+}
+
+.profile-delete-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.profile-delete-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.56);
+}
+
+.profile-delete-modal__dialog {
+  position: relative;
+  width: min(100%, 480px);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  box-shadow: 0 22px 56px rgba(17, 24, 39, 0.24);
+  padding: 1.1rem 1.1rem 1rem;
+}
+
+.profile-delete-modal__title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #b42318;
+}
+
+.profile-delete-modal__text {
+  margin: 0.65rem 0 1rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.profile-delete-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 600px) {
+  .profile-delete-modal__dialog {
+    width: 100%;
+    padding: 1rem;
+  }
+
+  .profile-delete-modal__actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .profile-delete-modal__actions .btn {
+    width: 100%;
+  }
+
   .utility-drawer-section--mobile-nav {
     display: grid;
   }

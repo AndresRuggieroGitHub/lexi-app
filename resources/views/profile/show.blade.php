@@ -27,7 +27,7 @@
         'nl' => 'icons/flags/netherlands_flag.svg',
         'no' => 'icons/flags/norway_flag.svg',
         'pl' => 'icons/flags/poland_flag.svg',
-        'pt' => 'icons/flags/portugal_flag.svg',
+        'pt' => 'icons/flags/brazil_flag.svg',
         'ro' => 'icons/flags/romania_flag.svg',
         'ru' => 'icons/flags/russia_flag.svg',
         'sk' => 'icons/flags/slovakia_flag.svg',
@@ -109,10 +109,9 @@
                     <div class="profile-setting-control">
                         <span class="profile-native-pill profile-native-pill--locked">
                             @if ($nativeFlag)
-                                <img src="{{ asset($nativeFlag) }}" alt="" aria-hidden="true">
+                                <img src="{{ asset($nativeFlag) }}" alt="" aria-hidden="true" draggable="false">
                             @endif
-                            <span>{{ $languages[$user->mother_tongue_code] ?? strtoupper((string) $user->mother_tongue_code) }}</span>
-                            <i class="bi bi-lock-fill" style="font-size:0.7rem;color:var(--muted);"></i>
+                            <i class="bi bi-lock-fill profile-native-lock-icon" aria-hidden="true"></i>
                         </span>
                     </div>
                 </div>
@@ -121,12 +120,19 @@
             <div class="profile-setting-row" style="flex-direction:column;align-items:stretch;gap:0.75rem">
                 <span class="profile-setting-label">{{ __('lexi.profile.studied_languages') }}</span>
                 <div id="langChips" class="profile-studied-list">
-                    @forelse ($user->userLanguages as $userLanguage)
-                        <div class="profile-studied-row{{ $userLanguage->is_active ? ' is-active' : '' }}">
+                    @forelse ($studiedLanguages as $studiedLanguage)
+                        @php
+                            $studiedCode = strtolower((string) $studiedLanguage['code']);
+                            $studiedFlag = $flagByLanguage[$studiedCode] ?? null;
+                        @endphp
+                        <div class="profile-studied-row{{ $studiedLanguage['is_active'] ? ' is-active' : '' }}">
                             <div class="profile-studied-left">
-                                <span>{{ $languages[$userLanguage->language_code] ?? strtoupper($userLanguage->language_code) }}</span>
+                                @if ($studiedFlag)
+                                    <img src="{{ asset($studiedFlag) }}" alt="" aria-hidden="true" draggable="false">
+                                @endif
+                                <span>{{ $studiedLanguage['label'] }}</span>
                             </div>
-                            @if ($userLanguage->is_active)
+                            @if ($studiedLanguage['is_active'])
                                 <span class="profile-studied-badge">
                                     <i class="bi bi-check-circle-fill"></i>
                                     {{ __('lexi.profile.active') }}
@@ -162,15 +168,25 @@
                     <span class="profile-setting-label">{{ __('lexi.profile.delete_account') }}</span>
                     <p class="profile-setting-hint">{{ __('lexi.profile.delete_account_hint') }}</p>
                 </div>
-                <form id="deleteAccountForm" method="POST" action="{{ route('profile.destroy') }}">
-                    @csrf
-                    @method('DELETE')
-                    <input type="hidden" id="deleteConfirmText" value="{{ __('lexi.profile.delete_account_confirm') }}">
-                    <button class="btn btn-danger btn-sm" type="submit">{{ __('lexi.profile.delete_account') }}</button>
-                </form>
+                <button class="btn btn-danger btn-sm" type="button" id="btnOpenDeleteAccountModal">{{ __('lexi.profile.delete_account') }}</button>
             </div>
         </div>
     </section>
+
+    <div class="profile-delete-modal" id="deleteAccountModal" hidden aria-hidden="true">
+        <div class="profile-delete-modal__backdrop" data-delete-modal-close></div>
+        <div class="profile-delete-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="deleteAccountModalTitle" aria-describedby="deleteAccountModalText">
+            <h3 class="profile-delete-modal__title" id="deleteAccountModalTitle">{{ __('lexi.profile.delete_account') }}</h3>
+            <p class="profile-delete-modal__text" id="deleteAccountModalText">{{ __('lexi.profile.delete_account_confirm') }}</p>
+
+            <form id="deleteAccountForm" method="POST" action="{{ route('profile.destroy') }}" class="profile-delete-modal__actions">
+                @csrf
+                @method('DELETE')
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="btnCancelDeleteAccount" data-delete-modal-close>{{ __('lexi.common.cancel') }}</button>
+                <button class="btn btn-danger btn-sm" type="submit" id="btnConfirmDeleteAccount">{{ __('lexi.profile.delete_account') }}</button>
+            </form>
+        </div>
+    </div>
 </main>
 @endsection
 
@@ -178,13 +194,68 @@
 <script>
 (function () {
     const deleteAccountForm = document.getElementById('deleteAccountForm');
-    const deleteConfirmTextInput = document.getElementById('deleteConfirmText');
-    const deleteConfirmText = deleteConfirmTextInput ? deleteConfirmTextInput.value : 'Are you sure?';
+    const deleteAccountModal = document.getElementById('deleteAccountModal');
+    const openDeleteAccountModalButton = document.getElementById('btnOpenDeleteAccountModal');
+    const closeDeleteAccountModalControls = document.querySelectorAll('[data-delete-modal-close]');
+    let lastFocusedElement = null;
+
+    const openDeleteAccountModal = () => {
+        if (!deleteAccountModal) {
+            return;
+        }
+
+        lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        deleteAccountModal.hidden = false;
+        deleteAccountModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('profile-modal-open');
+
+        const confirmButton = document.getElementById('btnConfirmDeleteAccount');
+        if (confirmButton) {
+            confirmButton.focus();
+        }
+    };
+
+    const closeDeleteAccountModal = () => {
+        if (!deleteAccountModal) {
+            return;
+        }
+
+        deleteAccountModal.hidden = true;
+        deleteAccountModal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('profile-modal-open');
+
+        if (lastFocusedElement) {
+            lastFocusedElement.focus();
+        }
+    };
+
+    if (openDeleteAccountModalButton) {
+        openDeleteAccountModalButton.addEventListener('click', openDeleteAccountModal);
+    }
+
+    closeDeleteAccountModalControls.forEach((control) => {
+        control.addEventListener('click', closeDeleteAccountModal);
+    });
+
+    if (deleteAccountModal) {
+        deleteAccountModal.addEventListener('click', (event) => {
+            if (event.target === deleteAccountModal) {
+                closeDeleteAccountModal();
+            }
+        });
+
+        deleteAccountModal.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeDeleteAccountModal();
+            }
+        });
+    }
 
     if (deleteAccountForm) {
-        deleteAccountForm.addEventListener('submit', (event) => {
-            if (!confirm(deleteConfirmText)) {
-                event.preventDefault();
+        deleteAccountForm.addEventListener('submit', () => {
+            const confirmButton = document.getElementById('btnConfirmDeleteAccount');
+            if (confirmButton) {
+                confirmButton.disabled = true;
             }
         });
     }

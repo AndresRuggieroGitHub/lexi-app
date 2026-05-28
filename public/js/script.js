@@ -71,15 +71,19 @@
 
   const LANG_HISTORY_KEY = "lexiLangHistory";
   const getNativeLang = () => serverSessionState?.user?.mother_tongue_code || "es";
+  const getLangHistoryStorageKey = () => {
+    const userId = serverSessionState?.user?.id;
+    return userId ? `${LANG_HISTORY_KEY}:${userId}` : LANG_HISTORY_KEY;
+  };
   const getLangHistory = () => {
-    try { return JSON.parse(localStorage.getItem(LANG_HISTORY_KEY) || "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(getLangHistoryStorageKey()) || "[]"); } catch { return []; }
   };
   const recordLangActivity = (lang) => {
     if (!lang || lang === getNativeLang()) return;
     const hist = getLangHistory();
     if (!hist.find(h => h.lang === lang)) {
       hist.push({ lang, firstAt: Date.now() });
-      localStorage.setItem(LANG_HISTORY_KEY, JSON.stringify(hist));
+      localStorage.setItem(getLangHistoryStorageKey(), JSON.stringify(hist));
     }
   };
 
