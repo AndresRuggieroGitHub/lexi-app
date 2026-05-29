@@ -260,7 +260,6 @@
         </div>
         <div class="welcome-metrics">
           <div class="welcome-metric"><strong>30</strong><span>{{ __('lexi.welcome.metric_languages') }}</span></div>
-          <div class="welcome-metric"><strong>2</strong><span>{{ __('lexi.welcome.metric_functional_languages') }}</span></div>
           <div class="welcome-metric"><strong>5</strong><span>{{ __('lexi.welcome.metric_exercise_modes') }}</span></div>
         </div>
       </div>

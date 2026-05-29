@@ -34,6 +34,6 @@ class SetUiLocale
 
         return $this->generatedUiLocaleCatalog->supportsUiLocale($requestedLocale)
             ? $requestedLocale
-            : 'en';
+            : 'es';
     }
 }

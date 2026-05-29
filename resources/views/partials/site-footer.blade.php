@@ -36,8 +36,8 @@
         <span class="footer-stat-label">{!! __('lexi.footer.available_languages') !!}</span>
       </div>
       <div class="footer-stat">
-        <span class="footer-stat-num">2</span>
-        <span class="footer-stat-label">{!! __('lexi.footer.functional_languages') !!}</span>
+        <span class="footer-stat-num">5</span>
+        <span class="footer-stat-label">{!! __('lexi.footer.exercise_modes') !!}</span>
       </div>
     </div>
   </div>

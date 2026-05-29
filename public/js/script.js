@@ -159,6 +159,24 @@
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+  const getTopicLabel = (topicRaw) => {
+    const key = String(topicRaw || "")
+      .trim()
+      .replace(/^categories\./i, "")
+      .replace(/^topics\./i, "");
+
+    if (!key) return "";
+
+    const translated = t(`categories.${key}`);
+    if (translated && translated !== `categories.${key}`) {
+      return translated;
+    }
+
+    // Fallback legible si falta traduccion
+    const clean = key.replace(/[._-]+/g, " ").trim();
+    return clean.charAt(0).toUpperCase() + clean.slice(1);
+  };
+
   const renderLibraryCatalog = (catalog = []) => {
     const grid = document.querySelector("[data-library-grid]");
     if (!grid || !Array.isArray(catalog) || !catalog.length) return false;
@@ -166,10 +184,11 @@
     grid.innerHTML = catalog.map((item) => {
       const cefr = String(item.cefr || "").toUpperCase();
       const topic = String(item.topic || "");
+      const topicLabel = getTopicLabel(topic);
       const badgeClass = cefr ? `cefr-${cefr.toLowerCase()}` : "";
       const meta = [
         cefr ? `<span class="cefr-badge ${badgeClass}">${escapeHtml(cefr)}</span>` : "",
-        topic ? `<span class="topic-tag">${t('categories.' + topic)}</span>` : "",
+        topicLabel ? `<span class="topic-tag">${escapeHtml(topicLabel)}</span>` : "",
       ].filter(Boolean).join("");
 
       return `
@@ -1358,7 +1377,7 @@
                 ${translation ? `<span class="saved-word-translation">${translation}</span>` : ""}
                 <div class="saved-word-tags">
                   ${cefr  ? `<span class="cefr-badge ${cefrClass}">${cefr}</span>` : ""}
-                  ${topic ? `<span class="topic-tag">${topic}</span>` : ""}
+                  ${topic ? `<span class="topic-tag">${escapeHtml(getTopicLabel(topic))}</span>` : ""}
                 </div>
               </div>
               <button class="remove-saved-btn" type="button" data-remove-saved="${item.id}" data-remove-label="${item.label}" data-remove-language="${item.language || getActiveLang()}" data-remove-translation="${translation}" data-remove-cefr="${cefr}" data-remove-topic="${topic}" aria-label="${t("js.library.remove_word", { word: item.label })}"><i class="bi bi-x"></i></button>
