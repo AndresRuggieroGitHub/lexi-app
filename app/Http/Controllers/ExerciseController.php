@@ -17,7 +17,7 @@ class ExerciseController extends Controller
     public function startRuntime(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'mode' => ['required', Rule::in(['reading', 'listening', 'speaking', 'writing', 'mix'])],
+            'mode' => ['required', Rule::in(['reading', 'listening', 'speaking', 'writing', 'flashcards', 'matching', 'mix'])],
             'source_type' => ['required', Rule::in(['catalog', 'saved'])],
             'source_id' => ['nullable', 'string', 'max:80'],
             'language' => ['nullable', Rule::exists('languages', 'code')],
@@ -34,13 +34,16 @@ class ExerciseController extends Controller
         $items = $this->buildRuntimeItems($validated['mode'], $sourceItems);
         $title = $this->runtimeTitleForMode($validated['mode'], $validated['source_type']);
 
-        $aiResult = app(AiExerciseGenerator::class)->generate(
-            $validated['mode'],
-            $sourceItems,
-            $validated['source_type'],
-            $language,
-            $request->user()?->mother_tongue_code
-        );
+        $supportsAiGeneration = in_array($validated['mode'], ['reading', 'listening', 'speaking', 'writing', 'mix'], true);
+        $aiResult = $supportsAiGeneration
+            ? app(AiExerciseGenerator::class)->generate(
+                $validated['mode'],
+                $sourceItems,
+                $validated['source_type'],
+                $language,
+                $request->user()?->mother_tongue_code
+            )
+            : null;
 
         if (is_array($aiResult) && isset($aiResult['items']) && is_array($aiResult['items']) && $aiResult['items'] !== []) {
             $items = $aiResult['items'];
@@ -85,7 +88,7 @@ class ExerciseController extends Controller
                 'exercise_options.is_correct',
                 'exercise_options.option_order'
             )
-            ->whereIn('exercise_templates.type', ['reading', 'listening', 'speaking', 'writing', 'mix'])
+            ->whereIn('exercise_templates.type', ['reading', 'listening', 'speaking', 'writing', 'flashcards', 'matching', 'mix'])
             ->orderBy('exercise_templates.updated_at', 'desc')
             ->orderBy('exercise_templates.id', 'desc')
             ->orderBy('exercise_items.item_order')
@@ -152,7 +155,7 @@ class ExerciseController extends Controller
         }
 
         $validated = $request->validate([
-            'mode' => ['required', Rule::in(['reading', 'listening', 'speaking', 'writing', 'mix'])],
+            'mode' => ['required', Rule::in(['reading', 'listening', 'speaking', 'writing', 'flashcards', 'matching', 'mix'])],
             'source_type' => ['nullable', Rule::in(['catalog', 'saved'])],
             'source_name' => ['nullable', 'string', 'max:150'],
             'result_status' => ['nullable', Rule::in(['completed', 'passed', 'failed'])],
@@ -232,7 +235,9 @@ class ExerciseController extends Controller
             'listening' => 'Listening',
             'speaking' => 'Speaking',
             'writing' => 'Writing',
-            default => 'Combinado',
+            'flashcards' => 'Flashcards',
+            'matching' => 'Matching',
+            default => 'Desafio',
         };
     }
 
@@ -296,7 +301,9 @@ class ExerciseController extends Controller
             'listening' => 'Listening · ' . $suffix,
             'speaking' => 'Speaking · ' . $suffix,
             'writing' => 'Writing · ' . $suffix,
-            default => 'Combinado · ' . $suffix,
+            'flashcards' => 'Flashcards · ' . $suffix,
+            'matching' => 'Matching · ' . $suffix,
+            default => 'Desafio · ' . $suffix,
         };
     }
 
@@ -422,8 +429,54 @@ class ExerciseController extends Controller
             'writing' => $this->buildWritingRuntimeItems($withTranslation->all()),
             'listening' => $this->buildListeningRuntimeItems($withTranslation->all()),
             'speaking' => $this->buildSpeakingRuntimeItems($sourceItems),
+            'flashcards' => $this->buildFlashcardRuntimeItems($withTranslation->all()),
+            'matching' => $this->buildMatchingRuntimeItems($withTranslation->all()),
             default => $this->buildMixRuntimeItems($sourceItems),
         };
+    }
+
+    private function buildFlashcardRuntimeItems(array $items): array
+    {
+        return collect($items)
+            ->shuffle()
+            ->take(10)
+            ->map(fn ($item) => [
+                'type' => 'flashcard',
+                'itemId' => null,
+                'front' => (string) $item['text'],
+                'back' => (string) $item['translation'],
+                'hint' => !empty($item['topic']) ? (string) $item['topic'] : null,
+                'reveal_ms' => 1200,
+            ])
+            ->filter(fn ($item) => $item['front'] !== '' && $item['back'] !== '')
+            ->values()
+            ->all();
+    }
+
+    private function buildMatchingRuntimeItems(array $items): array
+    {
+        $pairs = collect($items)
+            ->shuffle()
+            ->map(fn ($item) => [
+                'left' => (string) $item['text'],
+                'right' => (string) $item['translation'],
+            ])
+            ->filter(fn ($pair) => $pair['left'] !== '' && $pair['right'] !== '')
+            ->unique(fn ($pair) => mb_strtolower($pair['left']))
+            ->take(10)
+            ->values()
+            ->all();
+
+        if (count($pairs) < 3) {
+            return [];
+        }
+
+        return [[
+            'type' => 'match',
+            'itemId' => null,
+            'question' => 'Conecta cada palabra con su traduccion correcta',
+            'pairs' => $pairs,
+        ]];
     }
 
     private function buildReadingRuntimeItems(array $items): array
@@ -506,12 +559,16 @@ class ExerciseController extends Controller
         $writing = $this->buildWritingRuntimeItems($items);
         $speaking = $this->buildSpeakingRuntimeItems($items);
         $listening = $this->buildListeningRuntimeItems($items);
+        $flashcards = $this->buildFlashcardRuntimeItems($items);
+        $matching = $this->buildMatchingRuntimeItems($items);
 
         return collect([
             $reading[0] ?? null,
             $listening[0] ?? null,
             $speaking[0] ?? null,
             $writing[0] ?? null,
+            $flashcards[0] ?? null,
+            $matching[0] ?? null,
         ])->filter()->values()->all();
     }
 

@@ -1925,6 +1925,136 @@ img {
   border-color: var(--brand);
 }
 
+/* Flashcards */
+.ex-flashcard {
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  min-height: 170px;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.ex-flashcard-face {
+  font-size: clamp(1.2rem, 3.8vw, 1.9rem);
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.ex-flashcard-face--back {
+  color: var(--brand-dark);
+}
+
+.ex-flashcard-meta {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.ex-flashcard-timer,
+.ex-flashcard-hint {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.22rem 0.62rem;
+}
+
+.ex-flashcard-timer {
+  color: #0f172a;
+  background: #eef2ff;
+}
+
+.ex-flashcard-hint {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.ex-flashcard-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.9rem;
+}
+
+/* Matching */
+.ex-matching-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 0.8rem;
+}
+
+.ex-matching-column {
+  max-height: 360px;
+  overflow: auto;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.15rem;
+}
+
+.ex-match-btn {
+  width: 100%;
+  text-align: left;
+  border: 2px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.62rem 0.75rem;
+  font-size: 0.92rem;
+  transition: border-color 0.18s, background-color 0.18s, transform 0.18s;
+}
+
+.ex-match-btn:hover:not(:disabled) {
+  border-color: var(--brand);
+  background: #fffbf2;
+  transform: translateY(-1px);
+}
+
+.ex-match-btn.is-selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.ex-match-btn.is-matched {
+  border-color: #198754;
+  background: #d1e7dd;
+}
+
+.ex-matching-connections {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-height: 1.8rem;
+}
+
+.ex-matching-placeholder {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.ex-match-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #f1f5f9;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 700px) {
+  .ex-matching-board {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Nav buttons */
 .ex-nav-btns {
   display: flex;

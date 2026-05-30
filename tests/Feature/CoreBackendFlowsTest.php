@@ -1057,6 +1057,92 @@ PHP);
         }
     }
 
+    public function test_exercise_runtime_start_supports_flashcards_and_matching_modes(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+
+        $this->seedLanguages();
+
+        $user = User::factory()->create();
+
+        $categoryId = DB::table('categories')->insertGetId([
+            'name' => 'Travel',
+            'language_code' => 'en',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $pairs = [
+            ['airport', 'aeropuerto'],
+            ['ticket', 'billete'],
+            ['hotel', 'hotel'],
+            ['station', 'estacion'],
+            ['journey', 'viaje'],
+        ];
+
+        foreach ($pairs as [$sourceText, $targetText]) {
+            $sourceId = DB::table('words')->insertGetId([
+                'client_key' => 'src-new-' . $sourceText,
+                'text' => $sourceText,
+                'language_code' => 'en',
+                'category_id' => $categoryId,
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $targetId = DB::table('words')->insertGetId([
+                'client_key' => 'dst-new-' . $targetText,
+                'text' => $targetText,
+                'language_code' => 'es',
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('translations')->insert([
+                'source_word_id' => $sourceId,
+                'target_word_id' => $targetId,
+                'created_at' => now(),
+            ]);
+
+            DB::table('user_words')->insert([
+                'user_id' => $user->id,
+                'word_id' => $sourceId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $flashcardsResponse = $this->actingAs($user)->postJson('/api/exercise-runtime/start', [
+            'mode' => 'flashcards',
+            'source_type' => 'saved',
+            'source_id' => 'library',
+            'language' => 'en',
+        ]);
+
+        $flashcardsResponse->assertOk();
+        $flashcardsResponse->assertJsonPath('ok', true);
+        $flashcardsResponse->assertJsonPath('mode', 'flashcards');
+        $flashcardsResponse->assertJsonPath('items.0.type', 'flashcard');
+
+        $matchingResponse = $this->actingAs($user)->postJson('/api/exercise-runtime/start', [
+            'mode' => 'matching',
+            'source_type' => 'saved',
+            'source_id' => 'library',
+            'language' => 'en',
+        ]);
+
+        $matchingResponse->assertOk();
+        $matchingResponse->assertJsonPath('ok', true);
+        $matchingResponse->assertJsonPath('mode', 'matching');
+        $matchingResponse->assertJsonPath('items.0.type', 'match');
+
+        $pairsPayload = $matchingResponse->json('items.0.pairs');
+        $this->assertIsArray($pairsPayload);
+        $this->assertGreaterThanOrEqual(3, count($pairsPayload));
+    }
+
     public function test_exercise_runtime_start_filters_ai_options_outside_source_vocabulary(): void
     {
         $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);

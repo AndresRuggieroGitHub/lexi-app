@@ -54,6 +54,18 @@
         <p class="exercise-card-label">{{ __('lexi.exercises.writing_label') }}</p>
         <span class="exercise-card-badge">{{ __('lexi.exercises.writing_label') }}</span>
       </article>
+      <article class="exercise-card" data-mode="flashcards" role="button" tabindex="0" aria-label="{{ __('lexi.exercises.card_flashcards_aria') }}" style="--card-color:#14b8a6">
+        <div class="exercise-card-icon"><i class="bi bi-layers-fill"></i></div>
+        <img src="images/mix_small.webp" srcset="images/mix_small.webp 300w, images/mix_medium.webp 600w, images/mix_large.webp 900w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 20vw" loading="lazy" alt="{{ __('lexi.exercises.flashcards_image_alt') }}">
+        <p class="exercise-card-label">{{ __('lexi.exercises.flashcards_label') }}</p>
+        <span class="exercise-card-badge">{{ __('lexi.exercises.flashcards_label') }}</span>
+      </article>
+      <article class="exercise-card" data-mode="matching" role="button" tabindex="0" aria-label="{{ __('lexi.exercises.card_matching_aria') }}" style="--card-color:#ef4444">
+        <div class="exercise-card-icon"><i class="bi bi-bezier2"></i></div>
+        <img src="images/mix_small.webp" srcset="images/mix_small.webp 300w, images/mix_medium.webp 600w, images/mix_large.webp 900w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 20vw" loading="lazy" alt="{{ __('lexi.exercises.matching_image_alt') }}">
+        <p class="exercise-card-label">{{ __('lexi.exercises.matching_label') }}</p>
+        <span class="exercise-card-badge">{{ __('lexi.exercises.matching_label') }}</span>
+      </article>
       <article class="exercise-card" data-mode="mix" role="button" tabindex="0" aria-label="{{ __('lexi.exercises.card_mix_aria') }}" style="--card-color:#f9b233">
         <div class="exercise-card-icon"><i class="bi bi-shuffle"></i></div>
         <img src="images/mix_small.webp" srcset="images/mix_small.webp 300w, images/mix_medium.webp 600w, images/mix_large.webp 900w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 20vw" loading="lazy" alt="{{ __('lexi.exercises.mix_image_alt') }}">
@@ -128,21 +140,21 @@
   const SHARED_CEFR_LEVELS = Array.isArray(sharedConfig.cefr_levels) ? sharedConfig.cefr_levels : [];
   const SHARED_TOPIC_OPTIONS = Array.isArray(sharedConfig.topic_options) ? sharedConfig.topic_options : [];
   const SKILL_LABELS = {
-    en: ['Reading',     'Listening', 'Speaking',   'Writing',    'Mix'],
-    fr: ['Lecture',     'Écoute',    'Expression',  'Écriture',   'Mix'],
-    de: ['Lesen',       'Hören',     'Sprechen',    'Schreiben',  'Mix'],
-    it: ['Lettura',     'Ascolto',   'Parlare',     'Scrittura',  'Mix'],
-    no: ['Lesing',      'Lytting',   'Snakking',    'Skriving',   'Mix'],
-    dk: ['Læsning',     'Lytning',   'Tale',        'Skrivning',  'Mix'],
-    fi: ['Lukeminen',   'Kuuntelu',  'Puhuminen',   'Kirjoitus',  'Mix'],
-    ko: ['읽기', '듣기', '말하기', '쓰기', 'Mix'],
-    zh: ['阅读', '听力', '口语', '写作', 'Mix'],
-    ru: ['Чтение', 'Слушание', 'Говорение', 'Письмо', 'Mix'],
-    ua: ['Читання', 'Слухання', 'Говоріння', 'Письмо', 'Mix'],
-    gr: ['Ανάγνωση', 'Ακρόαση', 'Ομιλία', 'Γραφή', 'Mix'],
-    es: ['Lectura',     'Escucha',   'Habla',       'Escritura',  'Mix'],
+    en: ['Reading', 'Listening', 'Speaking', 'Writing', 'Flashcards', 'Matching', 'Challenge'],
+    fr: ['Lecture', 'Écoute', 'Expression', 'Écriture', 'Flashcards', 'Matching', 'Challenge'],
+    de: ['Lesen', 'Hören', 'Sprechen', 'Schreiben', 'Flashcards', 'Matching', 'Challenge'],
+    it: ['Lettura', 'Ascolto', 'Parlare', 'Scrittura', 'Flashcards', 'Matching', 'Challenge'],
+    no: ['Lesing', 'Lytting', 'Snakking', 'Skriving', 'Flashcards', 'Matching', 'Challenge'],
+    dk: ['Læsning', 'Lytning', 'Tale', 'Skrivning', 'Flashcards', 'Matching', 'Challenge'],
+    fi: ['Lukeminen', 'Kuuntelu', 'Puhuminen', 'Kirjoitus', 'Flashcards', 'Matching', 'Challenge'],
+    ko: ['읽기', '듣기', '말하기', '쓰기', '플래시카드', '매칭', '챌린지'],
+    zh: ['阅读', '听力', '口语', '写作', '闪卡', '连线匹配', '挑战'],
+    ru: ['Чтение', 'Слушание', 'Говорение', 'Письмо', 'Карточки', 'Связи', 'Челлендж'],
+    ua: ['Читання', 'Слухання', 'Говоріння', 'Письмо', 'Картки', 'Поєднання', 'Виклик'],
+    gr: ['Ανάγνωση', 'Ακρόαση', 'Ομιλία', 'Γραφή', 'Flashcards', 'Matching', 'Challenge'],
+    es: ['Lectura', 'Escucha', 'Habla', 'Escritura', 'Tarjetas', 'Conectar', 'Desafio'],
   };
-  const BADGE_MODES = ['reading', 'listening', 'speaking', 'writing', 'mix'];
+  const BADGE_MODES = ['reading', 'listening', 'speaking', 'writing', 'flashcards', 'matching', 'mix'];
   const EXERCISE_SOURCE_KEY = 'lexiExerciseSource';
   const EXERCISE_COLLECTION_KEY = 'lexiExerciseCollection';
   const EXERCISE_CATALOG_LEVEL_KEY = 'lexiExerciseCatalogLevel';
@@ -548,8 +560,38 @@
     const listeningItems = buildCustomListeningItems(items).slice(0, 1);
     const speakingItems = buildCustomSpeakingItems(items).slice(0, 1);
     const writingItems = buildCustomWritingItems(items).slice(0, 1);
+    const flashcardItems = buildCustomFlashcardItems(items).slice(0, 1);
+    const matchingItems = buildCustomMatchingItems(items).slice(0, 1);
 
-    return [...readingItems, ...listeningItems, ...speakingItems, ...writingItems].filter(item => item && item.type);
+    return [...readingItems, ...listeningItems, ...speakingItems, ...writingItems, ...flashcardItems, ...matchingItems].filter(item => item && item.type);
+  }
+
+  function buildCustomFlashcardItems(items) {
+    return items
+      .filter(item => item.text && item.translation)
+      .slice(0, 12)
+      .map(item => ({
+        type: 'flashcard',
+        front: item.text,
+        back: item.translation,
+        hint: item.topic || '',
+        reveal_ms: 1200,
+      }));
+  }
+
+  function buildCustomMatchingItems(items) {
+    const pairs = items
+      .filter(item => item.text && item.translation)
+      .slice(0, 12)
+      .map(item => ({ left: item.text, right: item.translation }));
+
+    if (pairs.length < 3) return [];
+
+    return [{
+      type: 'match',
+      question: tx('matching_question', 'Conecta cada palabra con su traduccion correcta'),
+      pairs,
+    }];
   }
 
   function shuffleArray(items) {
@@ -680,6 +722,20 @@
 
     if (mode === 'mix') {
       const customItems = buildCustomMixItems(source.items);
+      if (customItems.length) {
+        return { title: base.title + ' · ' + source.name, items: customItems };
+      }
+    }
+
+    if (mode === 'flashcards') {
+      const customItems = buildCustomFlashcardItems(source.items);
+      if (customItems.length) {
+        return { title: base.title + ' · ' + source.name, items: customItems };
+      }
+    }
+
+    if (mode === 'matching') {
+      const customItems = buildCustomMatchingItems(source.items);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
@@ -1018,6 +1074,8 @@
     else if (item.type === 'fillin') renderFillin(content, item);
     else if (item.type === 'pronounce') renderPronounce(content, item);
     else if (item.type === 'translate') renderTranslate(content, item);
+    else if (item.type === 'flashcard') renderFlashcard(content, item);
+    else if (item.type === 'match') renderMatching(content, item);
   }
 
   function nextExercise() {
@@ -1107,9 +1165,9 @@
       '<div class="ex-feedback" hidden></div>';
 
     container.querySelector('.ex-transcript-toggle').addEventListener('click', function () {
-      const t = container.querySelector('.ex-transcript');
-      t.hidden = !t.hidden;
-      this.innerHTML = t.hidden
+      const transcriptEl = container.querySelector('.ex-transcript');
+      transcriptEl.hidden = !transcriptEl.hidden;
+      this.innerHTML = transcriptEl.hidden
         ? t('show_transcript') + ' <i class="bi ' + t('close_transcript_icon_down') + '"></i>'
         : t('hide_transcript') + ' <i class="bi ' + t('close_transcript_icon_up') + '"></i>';
     });
@@ -1242,6 +1300,210 @@
       }
       feedback.hidden = false;
     });
+  }
+
+  function renderFlashcard(container, item) {
+    const revealMs = Number(item.reveal_ms) > 0 ? Number(item.reveal_ms) : 1200;
+    const hintText = item.hint ? '<span class="ex-flashcard-hint">' + item.hint + '</span>' : '';
+
+    container.innerHTML =
+      '<p class="ex-type-label"><i class="bi bi-layers"></i> ' + tx('flashcards_label', 'Tarjetas rapidas') + '</p>' +
+      '<p class="ex-question">' + tx('flashcards_instruction', 'Mira la traduccion un instante, se tapa y marca si la recordaste.') + '</p>' +
+      '<div class="ex-flashcard" data-visible="0">' +
+        '<div class="ex-flashcard-face ex-flashcard-face--front">' + item.front + '</div>' +
+        '<div class="ex-flashcard-face ex-flashcard-face--back" hidden>' + item.back + '</div>' +
+      '</div>' +
+      '<div class="ex-flashcard-meta">' +
+        '<span class="ex-flashcard-timer">' + tx('flashcards_reveal_label', 'Vista') + ': ' + Math.round(revealMs / 1000) + 's</span>' +
+        hintText +
+      '</div>' +
+      '<div class="ex-flashcard-actions">' +
+        '<button class="btn btn-primary ex-flashcard-show">' + tx('flashcards_show', 'Mostrar 1 segundo') + '</button>' +
+      '</div>' +
+      '<div class="ex-self-check" hidden>' +
+        '<p>' + tx('flashcards_remembered_question', '¿La recordaste sin mirar otra vez?') + '</p>' +
+        '<div class="ex-self-check-btns">' +
+          '<button class="btn btn-success ex-flashcard-yes"><i class="bi bi-check-lg"></i> ' + tx('flashcards_yes', 'Si, la sabia') + '</button>' +
+          '<button class="btn btn-outline-danger ex-flashcard-no">' + tx('flashcards_no', 'No, me costo') + '</button>' +
+        '</div>' +
+      '</div>';
+
+    const card = container.querySelector('.ex-flashcard');
+    const front = container.querySelector('.ex-flashcard-face--front');
+    const back = container.querySelector('.ex-flashcard-face--back');
+    const showBtn = container.querySelector('.ex-flashcard-show');
+    const selfCheck = container.querySelector('.ex-self-check');
+
+    showBtn.addEventListener('click', () => {
+      showBtn.disabled = true;
+      card.dataset.visible = '1';
+      back.hidden = false;
+      front.hidden = true;
+
+      window.setTimeout(() => {
+        card.dataset.visible = '0';
+        back.hidden = true;
+        front.hidden = false;
+        selfCheck.hidden = false;
+      }, revealMs);
+    });
+
+    container.querySelector('.ex-flashcard-yes').addEventListener('click', () => {
+      markExerciseItemResult(container, true, {
+        itemId: item.itemId,
+        itemType: item.type,
+        prompt: item.front,
+        expectedAnswer: item.back,
+        answerText: item.front,
+        answerPayload: { remembered: true, reveal_ms: revealMs },
+        feedback: tx('correct', 'Correcto!'),
+      });
+      selfCheck.innerHTML = '<p class="ex-feedback ex-feedback--ok" style="display:block"><i class="bi bi-check-circle-fill"></i> ' + tx('flashcards_success', 'Perfecto, seguimos.') + '</p>';
+    });
+
+    container.querySelector('.ex-flashcard-no').addEventListener('click', () => {
+      markExerciseItemResult(container, false, {
+        itemId: item.itemId,
+        itemType: item.type,
+        prompt: item.front,
+        expectedAnswer: item.back,
+        answerText: null,
+        answerPayload: { remembered: false, reveal_ms: revealMs },
+        feedback: tx('incorrect', 'Incorrecto'),
+      });
+      selfCheck.innerHTML = '<p class="ex-feedback ex-feedback--warn" style="display:block"><i class="bi bi-arrow-repeat"></i> ' + tx('flashcards_retry_hint', 'Repite esta tarjeta al final para fijarla mejor.') + '</p>';
+    });
+  }
+
+  function renderMatching(container, item) {
+    const pairs = Array.isArray(item.pairs) ? item.pairs : [];
+    const leftItems = shuffleArray(pairs.map(pair => pair.left));
+    const rightItems = shuffleArray(pairs.map(pair => pair.right));
+    const expected = new Map(pairs.map(pair => [pair.left, pair.right]));
+    const matchedLeft = new Set();
+    const matchedRight = new Set();
+    const connections = [];
+    let selectedLeft = null;
+    let selectedRight = null;
+    let mistakes = 0;
+
+    container.innerHTML =
+      '<p class="ex-type-label"><i class="bi bi-bezier2"></i> ' + tx('matching_label', 'Conectar columnas') + '</p>' +
+      '<p class="ex-question">' + (item.question || tx('matching_question', 'Conecta cada palabra con su traduccion correcta')) + '</p>' +
+      '<div class="ex-matching-board">' +
+        '<div class="ex-matching-column" data-column="left"></div>' +
+        '<div class="ex-matching-column" data-column="right"></div>' +
+      '</div>' +
+      '<div class="ex-matching-connections" aria-live="polite"></div>' +
+      '<div class="ex-feedback" hidden></div>';
+
+    const leftColumn = container.querySelector('[data-column="left"]');
+    const rightColumn = container.querySelector('[data-column="right"]');
+    const connectionList = container.querySelector('.ex-matching-connections');
+    const feedback = container.querySelector('.ex-feedback');
+
+    const refreshConnectionList = () => {
+      if (!connections.length) {
+        connectionList.innerHTML = '<span class="ex-matching-placeholder">' + tx('matching_pending', 'Conexiones pendientes...') + '</span>';
+        return;
+      }
+
+      connectionList.innerHTML = connections
+        .map(connection => '<span class="ex-match-pill"><strong>' + connection.left + '</strong> <i class="bi bi-arrow-right"></i> ' + connection.right + '</span>')
+        .join('');
+    };
+
+    const selectLeft = (button, value) => {
+      if (matchedLeft.has(value)) return;
+      selectedLeft = value;
+      leftColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
+      button.classList.add('is-selected');
+      evaluateSelection();
+    };
+
+    const selectRight = (button, value) => {
+      if (matchedRight.has(value)) return;
+      selectedRight = value;
+      rightColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
+      button.classList.add('is-selected');
+      evaluateSelection();
+    };
+
+    const evaluateSelection = () => {
+      if (!selectedLeft || !selectedRight) return;
+
+      const isCorrectMatch = expected.get(selectedLeft) === selectedRight;
+      if (isCorrectMatch) {
+        matchedLeft.add(selectedLeft);
+        matchedRight.add(selectedRight);
+        connections.push({ left: selectedLeft, right: selectedRight });
+        feedback.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + tx('correct', 'Correcto!');
+        feedback.className = 'ex-feedback ex-feedback--ok';
+      } else {
+        mistakes += 1;
+        feedback.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + tx('matching_wrong_pair', 'Esa pareja no coincide. Intenta otra.');
+        feedback.className = 'ex-feedback ex-feedback--err';
+      }
+
+      feedback.hidden = false;
+      selectedLeft = null;
+      selectedRight = null;
+      leftColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
+      rightColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
+      paintMatchedButtons();
+      refreshConnectionList();
+
+      if (matchedLeft.size === pairs.length) {
+        const score = Math.max(0, Math.round(((pairs.length - mistakes) / pairs.length) * 100));
+        const success = score >= 70;
+        markExerciseItemResult(container, success, {
+          itemId: item.itemId,
+          itemType: item.type,
+          prompt: item.question,
+          expectedAnswer: JSON.stringify(pairs),
+          answerText: JSON.stringify(connections),
+          answerPayload: { mistakes, score },
+          pointsObtained: score / 100,
+          feedback: success ? tx('correct', 'Correcto!') : tx('incorrect', 'Incorrecto'),
+        });
+      }
+    };
+
+    const paintMatchedButtons = () => {
+      leftColumn.querySelectorAll('.ex-match-btn').forEach(button => {
+        const value = button.dataset.value;
+        button.disabled = matchedLeft.has(value);
+        button.classList.toggle('is-matched', matchedLeft.has(value));
+      });
+
+      rightColumn.querySelectorAll('.ex-match-btn').forEach(button => {
+        const value = button.dataset.value;
+        button.disabled = matchedRight.has(value);
+        button.classList.toggle('is-matched', matchedRight.has(value));
+      });
+    };
+
+    leftItems.forEach(value => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ex-match-btn';
+      button.dataset.value = value;
+      button.textContent = value;
+      button.addEventListener('click', () => selectLeft(button, value));
+      leftColumn.appendChild(button);
+    });
+
+    rightItems.forEach(value => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ex-match-btn';
+      button.dataset.value = value;
+      button.textContent = value;
+      button.addEventListener('click', () => selectRight(button, value));
+      rightColumn.appendChild(button);
+    });
+
+    refreshConnectionList();
   }
 
   function showCompletion() {
