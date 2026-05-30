@@ -17,10 +17,16 @@ class AiExerciseGenerator
         $model = (string) config('services.openai.model', 'gpt-4o-mini');
         $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
         $prompt = $this->buildPrompt($mode, $sourceItems, $sourceType, $learningLanguage, $nativeLanguage);
+        $request = Http::timeout(15)->withToken($apiKey);
 
-        $response = Http::timeout(15)
-            ->withToken($apiKey)
-            ->post($baseUrl . '/chat/completions', [
+        if (str_contains(strtolower($baseUrl), 'openrouter.ai')) {
+            $request = $request->withHeaders([
+                'HTTP-Referer' => (string) (config('services.openai.http_referer') ?: config('app.url', 'http://localhost')),
+                'X-Title' => (string) (config('services.openai.app_title') ?: config('app.name', 'Lexi')),
+            ]);
+        }
+
+        $response = $request->post($baseUrl . '/chat/completions', [
                 'model' => $model,
                 'temperature' => 0.4,
                 'response_format' => ['type' => 'json_object'],
