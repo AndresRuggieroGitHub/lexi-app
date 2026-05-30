@@ -117,6 +117,10 @@
 
     return template.replace(/:([a-zA-Z_]+)/g, (_, token) => replacements[token] ?? `:${token}`);
   };
+  const tx = (key, fallback) => {
+    const value = t(key);
+    return value === key ? fallback : value;
+  };
   const sharedConfigNode = document.getElementById('lexiExerciseSharedConfig');
   const sharedConfig = sharedConfigNode ? JSON.parse(sharedConfigNode.textContent || '{}') : {};
   const templateCatalogNode = document.getElementById('lexiExerciseTemplateCatalog');
@@ -349,12 +353,25 @@
     return {
       id: 'catalog',
       name: [selectedLevel, selectedTopic].filter(Boolean).join(' · ') || t('catalog_name'),
-      items: selectedLevel && selectedTopic ? filteredItems : [],
+      items: filteredItems,
       levels,
       topics,
       selectedLevel,
       selectedTopic,
     };
+  }
+
+  function aggregateSavedItems(library, collections) {
+    const merged = [...(library.items || []), ...collections.flatMap(collection => collection.items || [])];
+    const byKey = new Map();
+
+    merged.forEach(item => {
+      const key = String(item.id || item.clientKey || item.text || '').trim().toLowerCase();
+      if (!key) return;
+      if (!byKey.has(key)) byKey.set(key, item);
+    });
+
+    return Array.from(byKey.values());
   }
 
   function getSelectedVocabularySource() {
@@ -363,9 +380,13 @@
     }
 
     const { library, collections } = getVocabularySources();
-    const selectedId = localStorage.getItem(EXERCISE_COLLECTION_KEY) || '';
-    if (!selectedId) {
-      return { id: 'saved', name: t('saved_lists_name'), items: [] };
+    const selectedId = localStorage.getItem(EXERCISE_COLLECTION_KEY) || 'all_saved';
+    if (selectedId === 'all_saved') {
+      return {
+        id: 'all_saved',
+        name: tx('all_collections', 'Todas las colecciones'),
+        items: aggregateSavedItems(library, collections),
+      };
     }
     return collections.find(collection => String(collection.id) === selectedId) || (selectedId === 'library' ? library : { id: 'saved', name: t('saved_lists_name'), items: [] });
   }
@@ -390,7 +411,7 @@
         localStorage.setItem(EXERCISE_SOURCE_KEY, button.dataset.sourceTab);
         localStorage.setItem(EXERCISE_CATALOG_LEVEL_KEY, '');
         localStorage.setItem(EXERCISE_CATALOG_TOPIC_KEY, '');
-        localStorage.setItem(EXERCISE_COLLECTION_KEY, '');
+        localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
         try {
           await loadVocabularySources(button.dataset.sourceTab === 'saved' ? t('loading_saved_lists') : t('loading_catalog'));
           syncSourcePanels();
@@ -418,8 +439,8 @@
       if (level === 'B2' || level === 'C1') return '▮▮▮▮▯ ' + level;
       return '▮▮▮▮▮ ' + level;
     };
-    levelSelect.innerHTML = '<option value="">' + t('select_level') + '</option>' + catalogSource.levels.map(level => '<option value="' + level + '">' + levelOptionLabel(level) + '</option>').join('');
-    topicSelect.innerHTML = '<option value="">' + t('select_category') + '</option>' + getTopicOptions().map(topic => '<option value="' + topic.value + '">' + topic.label + '</option>').join('');
+    levelSelect.innerHTML = '<option value="">' + tx('all_levels', 'Todos los niveles') + '</option>' + catalogSource.levels.map(level => '<option value="' + level + '">' + levelOptionLabel(level) + '</option>').join('');
+    topicSelect.innerHTML = '<option value="">' + tx('all_categories', 'Todas las categorias') + '</option>' + getTopicOptions().map(topic => '<option value="' + topic.value + '">' + topic.label + '</option>').join('');
 
     levelSelect.value = catalogSource.selectedLevel;
     topicSelect.value = catalogSource.selectedTopic;
@@ -437,17 +458,18 @@
     if (!select) return;
 
     const { library, collections } = getVocabularySources();
-    const selectedId = localStorage.getItem(EXERCISE_COLLECTION_KEY) || '';
+    const selectedId = localStorage.getItem(EXERCISE_COLLECTION_KEY) || 'all_saved';
     const options = [library, ...collections];
+    const allCount = aggregateSavedItems(library, collections).length;
 
-    select.innerHTML = '<option value="">' + t('select_collection') + '</option>' + options.map(source => {
+    select.innerHTML = '<option value="all_saved">' + tx('all_collections', 'Todas las colecciones') + ' (' + allCount + ')</option>' + options.map(source => {
       const count = source.items.length;
       const label = source.name + ' (' + count + ')';
       return '<option value="' + String(source.id) + '">' + label + '</option>';
     }).join('');
 
-    const hasSelected = options.some(source => String(source.id) === selectedId);
-    select.value = hasSelected ? selectedId : '';
+    const hasSelected = selectedId === 'all_saved' || options.some(source => String(source.id) === selectedId);
+    select.value = hasSelected ? selectedId : 'all_saved';
     localStorage.setItem(EXERCISE_COLLECTION_KEY, select.value);
 
     select.onchange = () => {
@@ -459,7 +481,7 @@
     localStorage.setItem(EXERCISE_SOURCE_KEY, 'catalog');
     localStorage.setItem(EXERCISE_CATALOG_LEVEL_KEY, '');
     localStorage.setItem(EXERCISE_CATALOG_TOPIC_KEY, '');
-    localStorage.setItem(EXERCISE_COLLECTION_KEY, '');
+    localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
   }
 
   function buildCustomSpeakingItems(items) {
