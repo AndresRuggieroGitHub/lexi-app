@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Language;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class AdminUsersController extends Controller
@@ -46,5 +47,39 @@ class AdminUsersController extends Controller
                 'teachers' => User::query()->whereHas('roles', fn ($query) => $query->where('name', 'teacher'))->count(),
             ],
         ]);
+    }
+
+    public function toggleVerification(Request $request, int $userId): RedirectResponse
+    {
+        $user = User::query()->findOrFail($userId);
+        $isVerified = $user->email_verified_at !== null;
+
+        $user->forceFill([
+            'email_verified_at' => $isVerified ? null : now(),
+        ])->save();
+
+        return back()->with('status', $isVerified
+            ? __('lexi.admin.users.flash_unverified')
+            : __('lexi.admin.users.flash_verified'));
+    }
+
+    public function destroy(Request $request, int $userId): RedirectResponse
+    {
+        $currentUserId = (int) ($request->user()?->id ?? 0);
+
+        if ($currentUserId === $userId) {
+            return back();
+        }
+
+        $user = User::query()->with('roles')->findOrFail($userId);
+        $isAdmin = $user->roles->contains(fn ($role) => $role->name === 'admin');
+
+        if ($isAdmin) {
+            return back();
+        }
+
+        $user->delete();
+
+        return back();
     }
 }

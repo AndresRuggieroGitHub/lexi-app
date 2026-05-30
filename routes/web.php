@@ -14,6 +14,7 @@ use App\Http\Controllers\AdminTranslationsController;
 use App\Http\Controllers\AdminUsersController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\CartCheckoutController;
 use App\Http\Controllers\ExerciseController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\ProfileController;
@@ -99,6 +100,7 @@ Route::middleware('auth')->group(function () use ($protectedStaticPages) {
     Route::delete('/api/library/collections/{collection}', [\App\Http\Controllers\LibraryController::class, 'destroyCollection'])->name('library.collections.destroy');
     Route::delete('/api/library/collections/{collection}/words', [\App\Http\Controllers\LibraryController::class, 'clearCollection'])->name('library.collections.clear');
     Route::post('/api/library/collections/{collection}/toggle-word', [\App\Http\Controllers\LibraryController::class, 'toggleCollectionWord'])->name('library.collections.toggle-word');
+    Route::post('/api/cart/checkout', [CartCheckoutController::class, 'store'])->name('cart.checkout');
 });
 
 Route::middleware('auth')->group(function () {
@@ -185,6 +187,16 @@ Route::middleware('auth')->group(function () {
 
         return app(AdminUsersController::class)->index($request);
     })->name('admin-users');
+    Route::patch('/admin-users/{user}/verification', function (Request $request, int $user) {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return app(AdminUsersController::class)->toggleVerification($request, $user);
+    })->name('admin-users.verification.toggle');
+    Route::delete('/admin-users/{user}', function (Request $request, int $user) {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return app(AdminUsersController::class)->destroy($request, $user);
+    })->name('admin-users.destroy');
 
     Route::get('/admin-languages', function (Request $request) {
         abort_unless($request->user()?->isAdmin(), 403);

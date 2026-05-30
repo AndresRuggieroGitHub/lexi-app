@@ -1266,6 +1266,42 @@ PHP);
         }
     }
 
+    public function test_cart_checkout_persists_subscription_and_payment_records(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson('/api/cart/checkout', [
+            'items' => [
+                [
+                    'id' => 'plan-premium-mensual',
+                    'name' => 'Plan Premium mensual',
+                    'price' => 9,
+                    'qty' => 1,
+                ],
+                [
+                    'id' => 'plan-premium-anual',
+                    'name' => 'Plan Premium anual',
+                    'price' => 79,
+                    'qty' => 1,
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('summary.payments_count', 2);
+
+        $this->assertSame(2, DB::table('subscriptions')->where('user_id', $user->id)->count());
+        $this->assertSame(2, DB::table('payments')->count());
+
+        $monthlyPlan = DB::table('plans')->where('code', 'plan-premium-mensual')->first();
+        $annualPlan = DB::table('plans')->where('code', 'plan-premium-anual')->first();
+
+        $this->assertNotNull($monthlyPlan);
+        $this->assertNotNull($annualPlan);
+        $this->assertSame('monthly', $monthlyPlan->billing_interval);
+        $this->assertSame('annual', $annualPlan->billing_interval);
+    }
+
     private function attachAdminRole(User $user): void
     {
         $roleId = DB::table('roles')->insertGetId([
