@@ -24,7 +24,17 @@
 
 	<article class="admin-card admin-stat">
 		<div class="admin-stat__row">
-			<span class="admin-chip admin-chip--green">{{ __('lexi.admin.collections.linked_chip') }}</span>
+			<span class="admin-chip admin-chip--green">{{ __('lexi.admin.collections.active_chip') }}</span>
+			<div class="admin-stat__icon"><i class="bi bi-check2-circle"></i></div>
+		</div>
+		<p class="admin-stat__value">{{ number_format($stats['active_collections']) }}</p>
+		<p class="admin-stat__label">{{ __('lexi.admin.collections.active_collections') }}</p>
+		<span class="admin-stat__meta"><i class="bi bi-archive"></i> {{ __('lexi.admin.collections.empty_collections', ['count' => number_format($stats['empty_collections'])]) }}</span>
+	</article>
+
+	<article class="admin-card admin-stat">
+		<div class="admin-stat__row">
+			<span class="admin-chip admin-chip--amber">{{ __('lexi.admin.collections.linked_chip') }}</span>
 			<div class="admin-stat__icon"><i class="bi bi-link"></i></div>
 		</div>
 		<p class="admin-stat__value">{{ number_format($stats['linked_words']) }}</p>
@@ -65,12 +75,12 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>{{ __('lexi.admin.collections.table_id') }}</th>
-						<th>{{ __('lexi.admin.collections.table_name') }}</th>
-						<th>{{ __('lexi.admin.collections.table_owner') }}</th>
-						<th>{{ __('lexi.admin.collections.table_language') }}</th>
-						<th>{{ __('lexi.admin.collections.table_words') }}</th>
-						<th>{{ __('lexi.admin.collections.table_status') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.collections.table_id') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.collections.table_name') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.collections.table_owner') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.collections.table_language') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.collections.table_words') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.collections.table_status') }}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -84,7 +94,15 @@
 							<td>{{ $owner }}</td>
 							<td>{{ strtoupper($collection->language_code) }}</td>
 							<td>{{ number_format($collection->words_count) }}</td>
-							<td><span class="admin-status {{ $collection->is_default ? 'admin-status--active' : 'admin-status--review' }}">{{ $collection->is_default ? __('lexi.admin.collections.status_default') : __('lexi.admin.collections.status_custom') }}</span></td>
+							<td>
+								@if ($collection->is_default)
+									<span class="admin-status admin-status--active">{{ __('lexi.admin.collections.status_default') }}</span>
+								@elseif ($collection->words_count > 0)
+									<span class="admin-status admin-status--active">{{ __('lexi.admin.collections.status_active') }}</span>
+								@else
+									<span class="admin-status admin-status--review">{{ __('lexi.admin.collections.status_empty') }}</span>
+								@endif
+							</td>
 						</tr>
 					@empty
 						<tr>

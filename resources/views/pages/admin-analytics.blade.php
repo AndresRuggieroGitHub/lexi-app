@@ -11,6 +11,34 @@
 	</div>
 </section>
 
+<p class="admin-empty-state" style="margin-top: 0;">
+	<i class="bi bi-diagram-3"></i>
+	{{ __('lexi.admin.analytics.scope_note') }}
+</p>
+
+<section class="admin-card">
+	<div class="admin-card__inner">
+		<div class="admin-card__head">
+			<div>
+				<h2>{{ __('lexi.admin.analytics.view_title') }}</h2>
+				<p>{{ __('lexi.admin.analytics.view_text') }}</p>
+			</div>
+			<form method="GET" class="admin-filters" style="margin: 0;">
+				<label for="window" class="admin-filters__label">{{ __('lexi.admin.analytics.window_filter') }}</label>
+				<select id="window" name="window" class="admin-select" onchange="this.form.submit()">
+					<option value="7" {{ $windowDays === 7 ? 'selected' : '' }}>{{ __('lexi.admin.analytics.window_7') }}</option>
+					<option value="30" {{ $windowDays === 30 ? 'selected' : '' }}>{{ __('lexi.admin.analytics.window_30') }}</option>
+					<option value="90" {{ $windowDays === 90 ? 'selected' : '' }}>{{ __('lexi.admin.analytics.window_90') }}</option>
+				</select>
+			</form>
+		</div>
+		<p class="admin-empty-state" style="margin-top: 0;">
+			<i class="bi bi-activity"></i>
+			{{ __('lexi.admin.analytics.window_summary', ['days' => $windowDays, 'attempts' => number_format($stats['attempts_in_window']), 'completion' => number_format($stats['completion_rate_in_window'])]) }}
+		</p>
+	</div>
+</section>
+
 <section class="admin-stats">
 	<article class="admin-card admin-stat">
 		<div class="admin-stat__row">
@@ -47,6 +75,52 @@
 	<div class="admin-card__inner">
 		<div class="admin-card__head">
 			<div>
+				<h2>{{ __('lexi.admin.analytics.per_user_title') }}</h2>
+				<p>{{ __('lexi.admin.analytics.per_user_text') }}</p>
+			</div>
+			<span class="admin-chip admin-chip--green">{{ __('lexi.admin.analytics.user_chip') }}</span>
+		</div>
+
+		<div class="admin-table-wrap">
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.user') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.metric_exercise_attempts') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.completion_label') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.metric_words_learned') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.metric_due_reviews') }}</th>
+					</tr>
+				</thead>
+				<tbody>
+					@forelse($perUserMetrics as $row)
+						@php
+							$completionByUser = (int) $row->attempts_count > 0
+								? (int) round(((int) $row->completed_count / (int) $row->attempts_count) * 100)
+								: 0;
+						@endphp
+						<tr>
+							<td>{{ trim(($row->name ?? '') . ' ' . ($row->surname ?? '')) ?: __('lexi.admin.analytics.deleted_user') }}<br><small>{{ $row->email }}</small></td>
+							<td>{{ number_format($row->attempts_count) }}</td>
+							<td>{{ number_format($completionByUser) }}%</td>
+							<td>{{ number_format($row->learned_words) }}</td>
+							<td>{{ number_format($row->due_reviews) }}</td>
+						</tr>
+					@empty
+						<tr>
+							<td colspan="5">{{ __('lexi.admin.analytics.no_user_metrics') }}</td>
+						</tr>
+					@endforelse
+				</tbody>
+			</table>
+		</div>
+	</div>
+</section>
+
+<section class="admin-card">
+	<div class="admin-card__inner">
+		<div class="admin-card__head">
+			<div>
 				<h2>{{ __('lexi.admin.analytics.overview_title') }}</h2>
 				<p>{{ __('lexi.admin.analytics.overview_text') }}</p>
 			</div>
@@ -57,10 +131,10 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>{{ __('lexi.admin.analytics.metric') }}</th>
-						<th>{{ __('lexi.admin.analytics.value') }}</th>
-						<th>{{ __('lexi.admin.analytics.window') }}</th>
-						<th>{{ __('lexi.admin.analytics.status') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.metric') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.value') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.window') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.status') }}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -92,12 +166,12 @@
 			<table class="admin-table">
 				<thead>
 					<tr>
-						<th>ID</th>
-						<th>{{ __('lexi.admin.analytics.user') }}</th>
-						<th>{{ __('lexi.admin.analytics.exercise') }}</th>
-						<th>{{ __('lexi.admin.analytics.result') }}</th>
-						<th>{{ __('lexi.admin.analytics.score') }}</th>
-						<th>{{ __('lexi.admin.analytics.completed') }}</th>
+						<th class="admin-table__th-strong">ID</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.user') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.exercise') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.result') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.score') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.analytics.completed') }}</th>
 					</tr>
 				</thead>
 				<tbody>

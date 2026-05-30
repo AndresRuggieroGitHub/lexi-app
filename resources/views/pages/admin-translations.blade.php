@@ -31,16 +31,6 @@
 		<p class="admin-stat__label">{{ __('lexi.admin.translations.with_context') }}</p>
 		<span class="admin-stat__meta"><i class="bi bi-check2-circle"></i> {{ __('lexi.admin.translations.without_context', ['count' => number_format($stats['without_context'])]) }}</span>
 	</article>
-
-	<article class="admin-card admin-stat">
-		<div class="admin-stat__row">
-			<span class="admin-chip admin-chip--amber">{{ __('lexi.admin.translations.quality_chip') }}</span>
-			<div class="admin-stat__icon"><i class="bi bi-shield-exclamation"></i></div>
-		</div>
-		<p class="admin-stat__value">{{ number_format($stats['suspicious_sources'] + $stats['suspicious_targets']) }}</p>
-		<p class="admin-stat__label">{{ __('lexi.admin.translations.quality_rows') }}</p>
-		<span class="admin-stat__meta"><i class="bi bi-arrow-left-right"></i> {{ __('lexi.admin.translations.quality_breakdown', ['sources' => number_format($stats['suspicious_sources']), 'targets' => number_format($stats['suspicious_targets'])]) }}</span>
-	</article>
 </section>
 
 <section class="admin-card">
@@ -80,18 +70,24 @@
 			</div>
 		</form>
 
+		@php
+			$sameLanguageSelected =
+				filled($filters['source_language'])
+				&& filled($filters['target_language'])
+				&& $filters['source_language'] === $filters['target_language'];
+		@endphp
+
 		<div class="admin-table-wrap">
-			<table class="admin-table">
+			<table class="admin-table admin-table--translations">
 				<thead>
 					<tr>
-						<th>{{ __('lexi.admin.translations.table_id') }}</th>
-						<th>{{ __('lexi.admin.translations.table_source') }}</th>
-						<th>{{ __('lexi.admin.translations.table_source_language') }}</th>
-						<th>{{ __('lexi.admin.translations.table_target') }}</th>
-						<th>{{ __('lexi.admin.translations.table_target_language') }}</th>
-						<th>{{ __('lexi.admin.translations.table_context') }}</th>
-						<th>{{ __('lexi.admin.translations.table_source_category') }}</th>
-						<th>{{ __('lexi.admin.translations.table_status') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.translations.table_id') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.translations.table_source_language') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.translations.table_source') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.translations.table_target_language') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.translations.table_target') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.translations.table_context') }}</th>
+						<th class="admin-table__th-strong">{{ __('lexi.admin.translations.table_source_category') }}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -99,23 +95,19 @@
 						@php
 							$source = $translation->sourceWord;
 							$target = $translation->targetWord;
-							$hasContext = filled($translation->context_note);
-							$statusClass = $hasContext ? 'admin-status--active' : 'admin-status--review';
-							$statusLabel = $hasContext ? __('lexi.admin.translations.status_contextualized') : __('lexi.admin.translations.status_without_context');
 						@endphp
 						<tr>
 							<td>{{ $translation->id }}</td>
-							<td>{{ $source?->text ?: __('lexi.admin.translations.na') }}</td>
 							<td>{{ strtoupper($source?->language_code ?: '--') }}</td>
-							<td>{{ $target?->text ?: __('lexi.admin.translations.na') }}</td>
+							<td>{{ $source?->text ?: __('lexi.admin.translations.na') }}</td>
 							<td>{{ strtoupper($target?->language_code ?: '--') }}</td>
+							<td>{{ $target?->text ?: __('lexi.admin.translations.na') }}</td>
 							<td>{{ $translation->context_note ?: __('lexi.admin.translations.no_note') }}</td>
 							<td>{{ $source?->category?->name ?: __('lexi.admin.translations.no_category') }}</td>
-							<td><span class="admin-status {{ $statusClass }}">{{ $statusLabel }}</span></td>
 						</tr>
 					@empty
 						<tr>
-							<td colspan="8">{{ __('lexi.admin.translations.no_translations_filter') }}</td>
+							<td colspan="7">{{ $sameLanguageSelected ? __('lexi.admin.translations.no_translations_same_language') : __('lexi.admin.translations.no_translations_filter') }}</td>
 						</tr>
 					@endforelse
 				</tbody>

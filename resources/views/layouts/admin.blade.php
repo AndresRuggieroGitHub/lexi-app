@@ -16,6 +16,10 @@
   <link rel="stylesheet" href="admin.css">
 </head>
 <body class="admin-body">
+  @php
+    $currentRouteName = \Illuminate\Support\Facades\Route::currentRouteName();
+    $isAdminPanelRoute = $currentRouteName === 'admin';
+  @endphp
   <div class="admin-shell">
     <aside class="admin-sidebar">
       <div class="admin-brand" aria-label="{{ __('lexi.admin.layout.brand_aria') }}">
@@ -37,6 +41,26 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+  (() => {
+    const panelUrl = @json(route('admin'));
+    const isPanelRoute = @json($isAdminPanelRoute);
+
+    if (isPanelRoute) {
+      return;
+    }
+
+    const state = history.state || {};
+    if (!state.__lexiAdminBackGuardInjected) {
+      history.replaceState({ ...state, __lexiAdminBackGuardInjected: true }, '', location.href);
+      history.pushState({ __lexiAdminBackTarget: true }, '', location.href);
+    }
+
+    window.addEventListener('popstate', () => {
+      window.location.href = panelUrl;
+    });
+  })();
+  </script>
   @yield('inlineScripts')
 </body>
 </html>

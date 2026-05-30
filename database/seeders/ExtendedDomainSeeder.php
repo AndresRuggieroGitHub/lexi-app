@@ -25,19 +25,25 @@ class ExtendedDomainSeeder extends Seeder
     {
         $featuresByPlan = [
             'free' => [
-                'library.access' => 'full',
-                'collections.limit' => '5',
-                'analytics.level' => 'basic',
+                'library.access' => 'enabled',
+                'exercises.basic' => 'enabled',
+                'analytics.basic' => 'enabled',
+                'teacher.guide' => 'disabled',
+                'exercises.personalized' => 'disabled',
             ],
-            'pro' => [
-                'library.access' => 'full',
-                'collections.limit' => 'unlimited',
-                'analytics.level' => 'advanced',
+            'plan-premium-mensual' => [
+                'library.access' => 'enabled',
+                'exercises.basic' => 'enabled',
+                'analytics.basic' => 'enabled',
+                'teacher.guide' => 'enabled',
+                'exercises.personalized' => 'enabled',
             ],
-            'team' => [
-                'teacher.workspace' => 'enabled',
-                'seats.included' => '10',
-                'analytics.level' => 'team',
+            'plan-premium-anual' => [
+                'library.access' => 'enabled',
+                'exercises.basic' => 'enabled',
+                'analytics.basic' => 'enabled',
+                'teacher.guide' => 'enabled',
+                'exercises.personalized' => 'enabled',
             ],
         ];
 
@@ -54,6 +60,11 @@ class ExtendedDomainSeeder extends Seeder
                     ['feature_value' => $featureValue, 'created_at' => $now, 'updated_at' => $now]
                 );
             }
+
+            DB::table('plan_features')
+                ->where('plan_id', $planId)
+                ->whereNotIn('feature_key', array_keys($features))
+                ->delete();
         }
     }
 
@@ -173,10 +184,10 @@ class ExtendedDomainSeeder extends Seeder
 
         if ($subscriptionId) {
             DB::table('payments')->updateOrInsert(
-                ['subscription_id' => $subscriptionId, 'provider_payment_id' => 'demo-payment-admin-pro'],
+                ['subscription_id' => $subscriptionId, 'provider_payment_id' => 'demo-payment-admin-premium-monthly'],
                 [
                     'provider' => 'manual',
-                    'amount_cents' => 990,
+                    'amount_cents' => 900,
                     'currency' => 'EUR',
                     'status' => 'paid',
                     'paid_at' => $now,

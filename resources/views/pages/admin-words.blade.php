@@ -60,7 +60,7 @@
 				</article>
 				<article class="admin-db-kpi">
 					<span class="admin-db-kpi__label">{{ __('lexi.admin.words.driver') }}</span>
-					<p class="admin-db-kpi__value">{{ strtoupper($databaseInfo['driver']) }}</p>
+					<p class="admin-db-kpi__value">{{ $databaseInfo['driver_label'] }}</p>
 				</article>
 				<article class="admin-db-kpi">
 					<span class="admin-db-kpi__label">{{ __('lexi.admin.words.database') }}</span>
@@ -77,7 +77,6 @@
 						<span class="admin-status admin-status--review">{{ __('lexi.admin.words.sqlite_active') }}</span>
 					@endif
 				</div>
-				<span class="admin-db-state__target">{{ __('lexi.admin.words.target') }}: {{ strtoupper($databaseInfo['target']) }}</span>
 			</div>
 
 		</div>
@@ -113,7 +112,7 @@
 		</form>
 
 		<div class="admin-table-wrap">
-			<table class="admin-table">
+			<table class="admin-table admin-table--words">
 				<thead>
 					<tr>
 						<th>{{ __('lexi.admin.words.table_id') }}</th>

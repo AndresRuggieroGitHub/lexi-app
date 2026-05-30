@@ -37,6 +37,13 @@ class AdminWordsController extends Controller
 
         $words = $wordsQuery->paginate(20)->withQueryString();
         $defaultConnection = DB::connection();
+        $driverName = $defaultConnection->getDriverName();
+
+        $driverLabel = match ($driverName) {
+            'mysql', 'mariadb' => 'MySQL/MariaDB',
+            'sqlite' => 'SQLite',
+            default => strtoupper($driverName),
+        };
 
         return view('pages.admin-words', [
             'words' => $words,
@@ -52,10 +59,10 @@ class AdminWordsController extends Controller
             ],
             'databaseInfo' => [
                 'connection' => config('database.default'),
-                'driver' => $defaultConnection->getDriverName(),
+                'driver' => $driverName,
+                'driver_label' => $driverLabel,
                 'database' => $defaultConnection->getDatabaseName(),
-                'target' => 'mysql',
-                'is_mysql_like' => in_array($defaultConnection->getDriverName(), ['mysql', 'mariadb'], true),
+                'is_mysql_like' => in_array($driverName, ['mysql', 'mariadb'], true),
             ],
         ]);
     }

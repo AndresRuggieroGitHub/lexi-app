@@ -19,10 +19,12 @@ class AdminCategoriesController extends Controller
         $search = trim((string) ($filters['q'] ?? ''));
         $language = $filters['language'] ?? '';
 
-        $categories = Category::query()
-            ->withCount('words')
+        $scopedCategoriesQuery = Category::query()
             ->when($search !== '', fn ($query) => $query->where('name', 'like', '%' . $search . '%'))
-            ->when($language !== '', fn ($query) => $query->where('language_code', $language))
+            ->when($language !== '', fn ($query) => $query->where('language_code', $language));
+
+        $categories = (clone $scopedCategoriesQuery)
+            ->withCount('words')
             ->orderByDesc('words_count')
             ->orderBy('name')
             ->paginate(20)
@@ -36,9 +38,10 @@ class AdminCategoriesController extends Controller
                 'language' => $language,
             ],
             'stats' => [
-                'categories' => Category::query()->count(),
-                'linked_words' => Category::query()->withCount('words')->get()->sum('words_count'),
-                'empty_categories' => Category::query()->doesntHave('words')->count(),
+                'categories' => (clone $scopedCategoriesQuery)->count(),
+                'linked_words' => (clone $scopedCategoriesQuery)->withCount('words')->get()->sum('words_count'),
+                'empty_categories' => (clone $scopedCategoriesQuery)->doesntHave('words')->count(),
+                'is_filtered' => $search !== '' || $language !== '',
             ],
         ]);
     }

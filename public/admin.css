@@ -397,11 +397,34 @@ body.admin-body {
 
 .admin-table th {
   background: #fafbfe;
-  color: #6a7385;
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  color: #0f172a;
+  font-size: 0.81rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.admin-table__th-strong {
+  font-weight: 900 !important;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  color: #111827;
+}
+
+.admin-table--translations th {
+  color: #0f172a !important;
+  font-weight: 900 !important;
+  font-size: 0.81rem;
+  letter-spacing: 0.03em;
+  background: #f3f5fb;
+}
+
+.admin-table--words th {
+  color: #0f172a !important;
+  font-weight: 900 !important;
+  font-size: 0.81rem;
+  letter-spacing: 0.03em;
+  background: #f3f5fb;
 }
 
 .admin-table tr:last-child td {

@@ -40,6 +40,12 @@ class AdminCollectionsController extends Controller
             ],
             'stats' => [
                 'collections' => UserCollection::query()->count(),
+                'active_collections' => UserCollection::query()
+                    ->whereHas('words')
+                    ->count(),
+                'empty_collections' => UserCollection::query()
+                    ->doesntHave('words')
+                    ->count(),
                 'default_collections' => UserCollection::query()->where('is_default', true)->count(),
                 'linked_words' => DB::table('collection_words')->count(),
             ],

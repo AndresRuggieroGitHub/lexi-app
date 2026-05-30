@@ -251,8 +251,7 @@ PHP);
         $response->assertOk();
         $response->assertSee('lang="ua"', false);
         $response->assertSee('Оплата');
-        $response->assertSee('Функції плану');
-        $response->assertSee('Використання користувача');
+        $response->assertSee('Робочий простір');
     }
 
     public function test_admin_ai_page_uses_translated_strings_for_admin_locale(): void
@@ -390,6 +389,9 @@ PHP);
             '/admin-roles.html' => 'pages.admin-roles',
             '/admin-exercises.html' => 'pages.admin-exercises',
             '/admin-billing.html' => 'pages.admin-billing',
+            '/admin-payments.html' => 'pages.admin-payments',
+            '/admin-usage.html' => 'pages.admin-usage',
+            '/admin-plan-features.html' => 'pages.admin-plan-features',
             '/admin-ai.html' => 'pages.admin-ai',
             '/admin-analytics.html' => 'pages.admin-analytics',
         ] as $route => $view) {
@@ -413,7 +415,7 @@ PHP);
         $response->assertSee('Abrir app');
         $response->assertSee('Cerrar sesion');
         $response->assertSee(route('admin-users'), false);
-        $response->assertSee(route('admin-billing') . '#features', false);
+        $response->assertSee(route('admin-plan-features'), false);
     }
 
     public function test_admin_billing_page_shows_real_plan_and_subscription_data(): void
@@ -426,9 +428,9 @@ PHP);
         $this->attachAdminRole($user);
 
         $planId = DB::table('plans')->insertGetId([
-            'code' => 'pro',
-            'name' => 'Pro',
-            'price_cents' => 990,
+            'code' => 'plan-premium-mensual',
+            'name' => 'Plan Premium mensual',
+            'price_cents' => 900,
             'currency' => 'EUR',
             'billing_interval' => 'monthly',
             'is_active' => true,
@@ -460,7 +462,7 @@ PHP);
             'subscription_id' => $subscriptionId,
             'provider' => 'manual',
             'provider_payment_id' => 'payment-admin-billing-test',
-            'amount_cents' => 990,
+            'amount_cents' => 900,
             'currency' => 'EUR',
             'status' => 'paid',
             'paid_at' => now(),
@@ -483,12 +485,9 @@ PHP);
         $response = $this->actingAs($user)->get('/admin-billing.html');
 
         $response->assertOk();
-        $response->assertSee('Pro');
+        $response->assertSee('Plan Premium mensual');
         $response->assertSee('admin-billing@test.local');
-        $response->assertSee('Funciones del plan');
-        $response->assertSee('analytics.level');
-        $response->assertSee('Pagos recientes');
-        $response->assertSee('Uso de usuario');
+        $response->assertSee('Suscripciones recientes');
     }
 
     public function test_admin_dashboard_cards_are_selectable_navigation_entries(): void
@@ -501,8 +500,8 @@ PHP);
         $response->assertOk();
         $response->assertSee('admin-entity-card--selectable', false);
         $response->assertDontSee('Ver todo');
-        $response->assertSee(route('admin-billing') . '#payments', false);
-        $response->assertSee(route('admin-billing') . '#usage', false);
+        $response->assertSee(route('admin-payments'), false);
+        $response->assertSee(route('admin-usage'), false);
     }
 
     public function test_admin_ai_page_shows_real_generation_data(): void

@@ -8,9 +8,12 @@ use App\Http\Controllers\AdminCollectionsController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminExercisesController;
 use App\Http\Controllers\AdminLanguagesController;
+use App\Http\Controllers\AdminPaymentsController;
+use App\Http\Controllers\AdminPlanFeaturesController;
 use App\Http\Controllers\AdminRolesController;
 use App\Http\Controllers\AdminWordsController;
 use App\Http\Controllers\AdminTranslationsController;
+use App\Http\Controllers\AdminUsageController;
 use App\Http\Controllers\AdminUsersController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -275,6 +278,42 @@ Route::middleware('auth')->group(function () {
 
         return app(AdminBillingController::class)->index($request);
     })->name('admin-billing');
+
+    Route::get('/admin-payments', function (Request $request) {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return app(AdminPaymentsController::class)->index($request);
+    });
+
+    Route::get('/admin-payments.html', function (Request $request) {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return app(AdminPaymentsController::class)->index($request);
+    })->name('admin-payments');
+
+    Route::get('/admin-usage', function (Request $request) {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return app(AdminUsageController::class)->index($request);
+    });
+
+    Route::get('/admin-usage.html', function (Request $request) {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return app(AdminUsageController::class)->index($request);
+    })->name('admin-usage');
+
+    Route::get('/admin-plan-features', function (Request $request) {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return app(AdminPlanFeaturesController::class)->index($request);
+    });
+
+    Route::get('/admin-plan-features.html', function (Request $request) {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        return app(AdminPlanFeaturesController::class)->index($request);
+    })->name('admin-plan-features');
 
     Route::get('/admin-ai', function (Request $request) {
         abort_unless($request->user()?->isAdmin(), 403);

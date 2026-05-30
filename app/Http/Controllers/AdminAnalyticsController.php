@@ -10,11 +10,21 @@ class AdminAnalyticsController extends Controller
 {
     public function index(Request $request): View
     {
+        $filters = $request->validate([
+            'window' => ['nullable', 'in:7,30,90'],
+        ]);
+
+        $windowDays = (int) ($filters['window'] ?? 30);
+        $windowStart = now()->copy()->subDays($windowDays);
+
         $userWords = DB::table('user_words');
         $attempts = DB::table('exercise_attempts');
+        $attemptsInWindow = DB::table('exercise_attempts')->where('created_at', '>=', $windowStart);
 
         $userWordsCount = (clone $userWords)->count();
         $attemptsCount = (clone $attempts)->count();
+        $attemptsInWindowCount = (clone $attemptsInWindow)->count();
+        $completedAttemptsInWindow = (clone $attemptsInWindow)->whereNotNull('completed_at')->count();
         $completedAttempts = (clone $attempts)->whereNotNull('completed_at')->count();
         $reviewDue = (clone $userWords)
             ->whereNotNull('next_review_at')
@@ -24,6 +34,10 @@ class AdminAnalyticsController extends Controller
 
         $completionRate = $attemptsCount > 0
             ? (int) round(($completedAttempts / $attemptsCount) * 100)
+            : 0;
+
+        $completionRateInWindow = $attemptsInWindowCount > 0
+            ? (int) round(($completedAttemptsInWindow / $attemptsInWindowCount) * 100)
             : 0;
 
         $recentActivity = DB::table('exercise_attempts')
@@ -40,6 +54,50 @@ class AdminAnalyticsController extends Controller
             )
             ->orderByDesc('exercise_attempts.created_at')
             ->limit(10)
+            ->get();
+
+        $attemptsByUser = DB::table('exercise_attempts')
+            ->select(
+                'user_id',
+                DB::raw('COUNT(*) as attempts_count'),
+                DB::raw('SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) as completed_count')
+            )
+            ->where('created_at', '>=', $windowStart)
+            ->groupBy('user_id');
+
+        $learnedByUser = DB::table('user_words')
+            ->select('user_id', DB::raw('SUM(CASE WHEN status = "learned" THEN 1 ELSE 0 END) as learned_words'))
+            ->groupBy('user_id');
+
+        $dueByUser = DB::table('user_words')
+            ->whereNotNull('next_review_at')
+            ->where('next_review_at', '<=', now())
+            ->select('user_id', DB::raw('COUNT(*) as due_reviews'))
+            ->groupBy('user_id');
+
+        $perUserMetrics = DB::table('users')
+            ->leftJoinSub($attemptsByUser, 'attempts_by_user', fn ($join) => $join->on('users.id', '=', 'attempts_by_user.user_id'))
+            ->leftJoinSub($learnedByUser, 'learned_by_user', fn ($join) => $join->on('users.id', '=', 'learned_by_user.user_id'))
+            ->leftJoinSub($dueByUser, 'due_by_user', fn ($join) => $join->on('users.id', '=', 'due_by_user.user_id'))
+            ->select(
+                'users.id',
+                'users.name',
+                'users.surname',
+                'users.email',
+                DB::raw('COALESCE(attempts_by_user.attempts_count, 0) as attempts_count'),
+                DB::raw('COALESCE(attempts_by_user.completed_count, 0) as completed_count'),
+                DB::raw('COALESCE(learned_by_user.learned_words, 0) as learned_words'),
+                DB::raw('COALESCE(due_by_user.due_reviews, 0) as due_reviews')
+            )
+            ->where(function ($query) {
+                $query
+                    ->whereRaw('COALESCE(attempts_by_user.attempts_count, 0) > 0')
+                    ->orWhereRaw('COALESCE(learned_by_user.learned_words, 0) > 0')
+                    ->orWhereRaw('COALESCE(due_by_user.due_reviews, 0) > 0');
+            })
+            ->orderByDesc('attempts_count')
+            ->orderByDesc('learned_words')
+            ->limit(12)
             ->get();
 
         $overview = [
@@ -71,8 +129,12 @@ class AdminAnalyticsController extends Controller
                 'records' => $userWordsCount + $attemptsCount,
                 'completion_rate' => $completionRate,
                 'review_due' => $reviewDue,
+                'attempts_in_window' => $attemptsInWindowCount,
+                'completion_rate_in_window' => $completionRateInWindow,
             ],
+            'windowDays' => $windowDays,
             'overview' => $overview,
+            'perUserMetrics' => $perUserMetrics,
             'recentActivity' => $recentActivity,
         ]);
     }

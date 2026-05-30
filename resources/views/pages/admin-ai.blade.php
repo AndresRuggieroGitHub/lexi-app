@@ -8,8 +8,92 @@
 		'rejected' => __('lexi.admin.ai.status_rejected'),
 	];
 @endphp
-<section class="admin-page-head"><div><h1>{{ __('lexi.admin.ai.heading') }}</h1><p>{{ __('lexi.admin.ai.intro') }}</p></div><div class="admin-page-actions"><a class="admin-btn admin-btn--ghost" href="{{ route('admin') }}"><i class="bi bi-arrow-left"></i> {{ __('lexi.admin.ai.back_panel') }}</a></div></section>
-<section class="admin-stats"><article class="admin-card admin-stat"><div class="admin-stat__row"><span class="admin-chip admin-chip--violet">{{ __('lexi.admin.ai.generations_chip') }}</span><div class="admin-stat__icon"><i class="bi bi-robot"></i></div></div><p class="admin-stat__value">{{ $stats['total'] }}</p><p class="admin-stat__label">{{ __('lexi.admin.ai.records_label') }}</p><span class="admin-stat__meta"><i class="bi bi-database"></i> {{ __('lexi.admin.ai.persisted_meta') }}</span></article><article class="admin-card admin-stat"><div class="admin-stat__row"><span class="admin-chip admin-chip--green">{{ __('lexi.admin.ai.approved_chip') }}</span><div class="admin-stat__icon"><i class="bi bi-patch-check"></i></div></div><p class="admin-stat__value">{{ $stats['approved'] }}</p><p class="admin-stat__label">{{ __('lexi.admin.ai.ready_label') }}</p><span class="admin-stat__meta"><i class="bi bi-check2-circle"></i> {{ __('lexi.admin.ai.reviewed_meta') }}</span></article><article class="admin-card admin-stat"><div class="admin-stat__row"><span class="admin-chip admin-chip--amber">{{ __('lexi.admin.ai.cost_chip') }}</span><div class="admin-stat__icon"><i class="bi bi-cash-coin"></i></div></div><p class="admin-stat__value">{{ number_format($stats['estimated_cost_cents'] / 100, 2, ',', '.') }} EUR</p><p class="admin-stat__label">{{ __('lexi.admin.ai.estimated_cost') }}</p><span class="admin-stat__meta"><i class="bi bi-hourglass-split"></i> {{ __('lexi.admin.ai.pending_count', ['count' => $stats['pending']]) }}</span></article></section>
-<section class="admin-card"><div class="admin-card__inner"><div class="admin-card__head"><div><h2>{{ __('lexi.admin.ai.recent_title') }}</h2><p>{{ __('lexi.admin.ai.recent_text') }}</p></div><span class="admin-chip admin-chip--violet">{{ __('lexi.admin.ai.traceability_chip') }}</span></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>{{ __('lexi.admin.ai.table_feature') }}</th><th>{{ __('lexi.admin.ai.table_model') }}</th><th>{{ __('lexi.admin.ai.table_languages') }}</th><th>{{ __('lexi.admin.ai.table_status') }}</th><th>{{ __('lexi.admin.ai.table_cost') }}</th><th>{{ __('lexi.admin.ai.table_reviewer') }}</th></tr></thead><tbody>@forelse ($generations as $generation)<tr><td><strong>{{ $generation->feature }}</strong><br><small>{{ \Illuminate\Support\Str::limit($generation->prompt, 72) }}</small></td><td>{{ $generation->model }}</td><td>{{ strtoupper($generation->source_language_code ?? '-') }} → {{ strtoupper($generation->target_language_code ?? '-') }}</td><td><span class="admin-status {{ $generation->status === 'approved' ? 'admin-status--active' : 'admin-status--review' }}">{{ $generationStatusLabels[$generation->status] ?? $generation->status }}</span></td><td>{{ number_format(($generation->estimated_cost_cents ?? 0) / 100, 2, ',', '.') }} EUR</td><td>{{ $generation->reviewer_email ?: __('lexi.admin.ai.not_reviewed') }}</td></tr>@empty<tr><td colspan="6">{{ __('lexi.admin.ai.no_generations') }}</td></tr>@endforelse</tbody></table></div></div></section>
-<section class="admin-card"><div class="admin-card__inner"><div class="admin-card__head"><div><h2>{{ __('lexi.admin.ai.debt_title') }}</h2><p>{{ __('lexi.admin.ai.debt_text') }}</p></div><span class="admin-chip admin-chip--amber">{{ __('lexi.admin.ai.pending_chip') }}</span></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>{{ __('lexi.admin.ai.table_area') }}</th><th>{{ __('lexi.admin.ai.table_needed') }}</th><th>{{ __('lexi.admin.ai.table_status') }}</th></tr></thead><tbody><tr><td>{{ __('lexi.admin.ai.execution') }}</td><td>{{ __('lexi.admin.ai.execution_needed') }}</td><td><span class="admin-status admin-status--draft">{{ __('lexi.admin.ai.status_pending') }}</span></td></tr><tr><td>{{ __('lexi.admin.ai.moderation') }}</td><td>{{ __('lexi.admin.ai.moderation_needed') }}</td><td><span class="admin-status admin-status--draft">{{ __('lexi.admin.ai.status_pending') }}</span></td></tr><tr><td>{{ __('lexi.admin.ai.versioning') }}</td><td>{{ __('lexi.admin.ai.versioning_needed') }}</td><td><span class="admin-status admin-status--draft">{{ __('lexi.admin.ai.status_pending') }}</span></td></tr></tbody></table></div></div></section>
+<section class="admin-page-head">
+	<div>
+		<h1>{{ __('lexi.admin.ai.heading') }}</h1>
+		<p>{{ __('lexi.admin.ai.intro') }}</p>
+	</div>
+	<div class="admin-page-actions">
+		<a class="admin-btn admin-btn--ghost" href="{{ route('admin') }}"><i class="bi bi-arrow-left"></i> {{ __('lexi.admin.ai.back_panel') }}</a>
+	</div>
+</section>
+
+<p class="admin-empty-state" style="margin-top: 0;">
+	<i class="bi bi-diagram-3"></i>
+	{{ __('lexi.admin.ai.scope_note') }}
+</p>
+
+<section class="admin-stats">
+	<article class="admin-card admin-stat">
+		<div class="admin-stat__row">
+			<span class="admin-chip admin-chip--violet">{{ __('lexi.admin.ai.generations_chip') }}</span>
+			<div class="admin-stat__icon"><i class="bi bi-robot"></i></div>
+		</div>
+		<p class="admin-stat__value">{{ $stats['total'] }}</p>
+		<p class="admin-stat__label">{{ __('lexi.admin.ai.records_label') }}</p>
+		<span class="admin-stat__meta"><i class="bi bi-database"></i> {{ __('lexi.admin.ai.persisted_meta') }}</span>
+	</article>
+
+	<article class="admin-card admin-stat">
+		<div class="admin-stat__row">
+			<span class="admin-chip admin-chip--green">{{ __('lexi.admin.ai.approved_chip') }}</span>
+			<div class="admin-stat__icon"><i class="bi bi-patch-check"></i></div>
+		</div>
+		<p class="admin-stat__value">{{ $stats['approved'] }}</p>
+		<p class="admin-stat__label">{{ __('lexi.admin.ai.ready_label') }}</p>
+		<span class="admin-stat__meta"><i class="bi bi-check2-circle"></i> {{ __('lexi.admin.ai.reviewed_meta') }}</span>
+	</article>
+
+	<article class="admin-card admin-stat">
+		<div class="admin-stat__row">
+			<span class="admin-chip admin-chip--amber">{{ __('lexi.admin.ai.cost_chip') }}</span>
+			<div class="admin-stat__icon"><i class="bi bi-cash-coin"></i></div>
+		</div>
+		<p class="admin-stat__value">{{ number_format($stats['estimated_cost_cents'] / 100, 2, ',', '.') }} EUR</p>
+		<p class="admin-stat__label">{{ __('lexi.admin.ai.estimated_cost') }}</p>
+		<span class="admin-stat__meta"><i class="bi bi-hourglass-split"></i> {{ __('lexi.admin.ai.pending_count', ['count' => $stats['pending']]) }}</span>
+	</article>
+</section>
+
+<section class="admin-card">
+	<div class="admin-card__inner">
+		<div class="admin-card__head">
+			<div>
+				<h2>{{ __('lexi.admin.ai.recent_title') }}</h2>
+				<p>{{ __('lexi.admin.ai.recent_text') }}</p>
+			</div>
+			<span class="admin-chip admin-chip--violet">{{ __('lexi.admin.ai.traceability_chip') }}</span>
+		</div>
+		<div class="admin-table-wrap">
+			<table class="admin-table">
+				<thead>
+					<tr>
+						<th>{{ __('lexi.admin.ai.table_feature') }}</th>
+						<th>{{ __('lexi.admin.ai.table_model') }}</th>
+						<th>{{ __('lexi.admin.ai.table_languages') }}</th>
+						<th>{{ __('lexi.admin.ai.table_status') }}</th>
+						<th>{{ __('lexi.admin.ai.table_cost') }}</th>
+						<th>{{ __('lexi.admin.ai.table_reviewer') }}</th>
+					</tr>
+				</thead>
+				<tbody>
+					@forelse ($generations as $generation)
+						<tr>
+							<td><strong>{{ $generation->feature }}</strong><br><small>{{ \Illuminate\Support\Str::limit($generation->prompt, 72) }}</small></td>
+							<td>{{ $generation->model }}</td>
+							<td>{{ strtoupper($generation->source_language_code ?? '-') }} → {{ strtoupper($generation->target_language_code ?? '-') }}</td>
+							<td><span class="admin-status {{ $generation->status === 'approved' ? 'admin-status--active' : 'admin-status--review' }}">{{ $generationStatusLabels[$generation->status] ?? $generation->status }}</span></td>
+							<td>{{ number_format(($generation->estimated_cost_cents ?? 0) / 100, 2, ',', '.') }} EUR</td>
+							<td>{{ $generation->reviewer_email ?: __('lexi.admin.ai.not_reviewed') }}</td>
+						</tr>
+					@empty
+						<tr>
+							<td colspan="6">{{ __('lexi.admin.ai.no_generations') }}</td>
+						</tr>
+					@endforelse
+				</tbody>
+			</table>
+		</div>
+	</div>
+</section>
 @endsection
