@@ -669,7 +669,7 @@
   async function registerExerciseAttempt() {
     try {
       const source = getSelectedVocabularySource();
-      const items = getModeData(currentMode).items || [];
+      const items = (currentModeData && currentModeData.items) ? currentModeData.items : (getModeData(currentMode).items || []);
       const itemCount = items.length;
       const timeSpentSeconds = sessionStartedAt ? Math.max(0, Math.round((Date.now() - sessionStartedAt) / 1000)) : null;
       const score = itemCount > 0 ? Math.round((sessionCorrectItems / itemCount) * 100) : null;
@@ -846,12 +846,59 @@
   let sessionAnsweredItems = 0;
   let sessionCorrectItems = 0;
   let sessionAnswerRecords = [];
+  let currentModeData = null;
 
   function resetExerciseSessionMetrics() {
     sessionStartedAt = Date.now();
     sessionAnsweredItems = 0;
     sessionCorrectItems = 0;
     sessionAnswerRecords = [];
+  }
+
+  function getRuntimeSelectionContext() {
+    const sourceType = getSelectedSourceType();
+    const context = {
+      source_type: sourceType,
+      language: getActiveLang(),
+    };
+
+    if (sourceType === 'saved') {
+      context.source_id = localStorage.getItem(EXERCISE_COLLECTION_KEY) || 'library';
+      return context;
+    }
+
+    context.source_id = 'catalog';
+    context.level = localStorage.getItem(EXERCISE_CATALOG_LEVEL_KEY) || null;
+    context.topic = localStorage.getItem(EXERCISE_CATALOG_TOPIC_KEY) || null;
+
+    return context;
+  }
+
+  async function fetchRuntimeModeData(mode) {
+    const context = getRuntimeSelectionContext();
+
+    const response = await exerciseApiFetch('/api/exercise-runtime/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        mode,
+        ...context,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('runtime-start-failed');
+    }
+
+    const payload = await response.json();
+
+    if (!payload || !payload.ok || !Array.isArray(payload.items) || !payload.items.length) {
+      return null;
+    }
+
+    return {
+      title: payload.title || EXERCISES[mode].title,
+      items: payload.items,
+    };
   }
 
   function markExerciseItemResult(container, isCorrect, details = {}) {
@@ -898,11 +945,22 @@
     document.getElementById('exerciseMenu').hidden = false;
   });
 
-  function openMode(mode) {
+  async function openMode(mode) {
     currentMode = mode;
     currentIndex = 0;
     resetExerciseSessionMetrics();
-    const modeData = getModeData(mode);
+    currentModeData = getModeData(mode);
+
+    try {
+      const runtimeData = await fetchRuntimeModeData(mode);
+
+      if (runtimeData && Array.isArray(runtimeData.items) && runtimeData.items.length) {
+        currentModeData = runtimeData;
+      }
+    } catch {
+    }
+
+    const modeData = currentModeData;
     document.getElementById('exerciseMenu').hidden = true;
     document.getElementById('exercisePanel').hidden = false;
     document.getElementById('exCompleteModal').hidden = true;
@@ -917,7 +975,7 @@
   }
 
   function renderExercise() {
-    const modeData = getModeData(currentMode);
+    const modeData = currentModeData || getModeData(currentMode);
     const items = modeData.items;
     const total = items.length;
     const item = items[currentIndex];
@@ -941,7 +999,8 @@
   }
 
   function nextExercise() {
-    const items = getModeData(currentMode).items;
+    const modeData = currentModeData || getModeData(currentMode);
+    const items = modeData.items;
     if (currentIndex < items.length - 1) {
       currentIndex++;
       renderExercise();
@@ -1168,7 +1227,7 @@
 
     document.getElementById('exercisePanel').hidden = true;
     const modal = document.getElementById('exCompleteModal');
-    const modeData = getModeData(currentMode);
+    const modeData = currentModeData || getModeData(currentMode);
     document.getElementById('exCompleteMsg').textContent =
       t('completed_all', { title: modeData.title });
     modal.hidden = false;

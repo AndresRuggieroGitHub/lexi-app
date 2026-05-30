@@ -7,6 +7,7 @@ use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -971,6 +972,192 @@ PHP);
             'answer_text' => 'casa',
             'is_correct' => true,
             'feedback' => 'Correcto',
+        ]);
+    }
+
+    public function test_exercise_runtime_start_builds_saved_reading_items_from_user_vocabulary(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+
+        $this->seedLanguages();
+
+        $user = User::factory()->create();
+
+        $categoryId = DB::table('categories')->insertGetId([
+            'name' => 'Travel',
+            'language_code' => 'en',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $pairs = [
+            ['airport', 'aeropuerto'],
+            ['ticket', 'billete'],
+            ['hotel', 'hotel'],
+            ['station', 'estacion'],
+        ];
+
+        foreach ($pairs as [$sourceText, $targetText]) {
+            $sourceId = DB::table('words')->insertGetId([
+                'client_key' => 'src-' . $sourceText,
+                'text' => $sourceText,
+                'language_code' => 'en',
+                'category_id' => $categoryId,
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $targetId = DB::table('words')->insertGetId([
+                'client_key' => 'dst-' . $targetText,
+                'text' => $targetText,
+                'language_code' => 'es',
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('translations')->insert([
+                'source_word_id' => $sourceId,
+                'target_word_id' => $targetId,
+                'created_at' => now(),
+            ]);
+
+            DB::table('user_words')->insert([
+                'user_id' => $user->id,
+                'word_id' => $sourceId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $response = $this->actingAs($user)->postJson('/api/exercise-runtime/start', [
+            'mode' => 'reading',
+            'source_type' => 'saved',
+            'source_id' => 'library',
+            'language' => 'en',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('ok', true);
+        $response->assertJsonPath('mode', 'reading');
+        $response->assertJsonPath('items.0.type', 'mcq');
+
+        $allowedSourceWords = collect($pairs)->pluck(0)->values()->all();
+        $items = $response->json('items');
+
+        $this->assertIsArray($items);
+        $this->assertNotEmpty($items);
+
+        foreach ($items as $item) {
+            $this->assertSame('mcq', $item['type'] ?? null);
+            foreach (($item['options'] ?? []) as $option) {
+                $this->assertContains($option, $allowedSourceWords);
+            }
+        }
+    }
+
+    public function test_exercise_runtime_start_filters_ai_options_outside_source_vocabulary(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+        $this->seedLanguages();
+
+        config()->set('services.openai.api_key', 'test-key');
+        config()->set('services.openai.model', 'gpt-4o-mini');
+
+        Http::fake([
+            '*' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'title' => 'AI Reading',
+                            'items' => [[
+                                'type' => 'mcq',
+                                'passage' => 'travel vocabulary',
+                                'question' => 'Choose',
+                                'options' => ['airport', 'ticket', 'tokyo', 'perro'],
+                                'correct' => 0,
+                            ]],
+                        ]),
+                    ],
+                ]],
+                'usage' => [
+                    'prompt_tokens' => 100,
+                    'completion_tokens' => 50,
+                ],
+            ], 200),
+        ]);
+
+        $user = User::factory()->create();
+        $categoryId = DB::table('categories')->insertGetId([
+            'name' => 'Travel',
+            'language_code' => 'en',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $pairs = [
+            ['airport', 'aeropuerto'],
+            ['ticket', 'billete'],
+            ['hotel', 'hotel'],
+            ['station', 'estacion'],
+        ];
+
+        foreach ($pairs as [$sourceText, $targetText]) {
+            $sourceId = DB::table('words')->insertGetId([
+                'client_key' => 'src-ai-' . $sourceText,
+                'text' => $sourceText,
+                'language_code' => 'en',
+                'category_id' => $categoryId,
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $targetId = DB::table('words')->insertGetId([
+                'client_key' => 'dst-ai-' . $targetText,
+                'text' => $targetText,
+                'language_code' => 'es',
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('translations')->insert([
+                'source_word_id' => $sourceId,
+                'target_word_id' => $targetId,
+                'created_at' => now(),
+            ]);
+
+            DB::table('user_words')->insert([
+                'user_id' => $user->id,
+                'word_id' => $sourceId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $response = $this->actingAs($user)->postJson('/api/exercise-runtime/start', [
+            'mode' => 'reading',
+            'source_type' => 'saved',
+            'source_id' => 'library',
+            'language' => 'en',
+        ]);
+
+        $response->assertOk();
+
+        $items = $response->json('items');
+        $allowedSourceWords = collect($pairs)->pluck(0)->values()->all();
+
+        foreach ($items as $item) {
+            foreach (($item['options'] ?? []) as $option) {
+                $this->assertContains($option, $allowedSourceWords);
+            }
+        }
+
+        $this->assertDatabaseHas('ai_generations', [
+            'feature' => 'exercise_runtime_reading',
+            'status' => 'approved',
         ]);
     }
 

@@ -35,4 +35,20 @@ return [
         ],
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        'default_token_rates' => [
+            'input_per_million' => 0.30,
+            'output_per_million' => 1.20,
+        ],
+        'token_rates' => [
+            'gpt-4o-mini' => [
+                'input_per_million' => 0.15,
+                'output_per_million' => 0.60,
+            ],
+        ],
+    ],
+
 ];

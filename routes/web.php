@@ -93,6 +93,7 @@ Route::middleware('auth')->group(function () use ($protectedStaticPages) {
     Route::delete('/perfil.html', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::get('/api/library/state', [\App\Http\Controllers\LibraryController::class, 'state'])->name('library.state');
     Route::get('/api/progress/state', [ProgressController::class, 'state'])->name('progress.state');
+    Route::post('/api/exercise-runtime/start', [ExerciseController::class, 'startRuntime'])->name('exercise-runtime.start');
     Route::post('/api/exercise-attempts', [ExerciseController::class, 'storeAttempt'])->name('exercise-attempts.store');
     Route::post('/api/library/words', [\App\Http\Controllers\LibraryController::class, 'storeWord'])->name('library.words.store');
     Route::delete('/api/library/words', [\App\Http\Controllers\LibraryController::class, 'clearLibrary'])->name('library.words.clear');

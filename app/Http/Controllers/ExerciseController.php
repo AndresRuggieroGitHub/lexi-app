@@ -2,16 +2,60 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\AiExerciseGenerator;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ExerciseController extends Controller
 {
+    public function startRuntime(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'mode' => ['required', Rule::in(['reading', 'listening', 'speaking', 'writing', 'mix'])],
+            'source_type' => ['required', Rule::in(['catalog', 'saved'])],
+            'source_id' => ['nullable', 'string', 'max:80'],
+            'language' => ['nullable', Rule::exists('languages', 'code')],
+            'level' => ['nullable', 'string', 'max:8'],
+            'topic' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $language = $validated['language'] ?? null;
+        $preferredTranslationLanguage = $request->user()?->mother_tongue_code ?: 'es';
+        $sourceItems = $validated['source_type'] === 'saved'
+            ? $this->savedVocabularyItems($request->user()->id, $validated['source_id'] ?? null, $language, $preferredTranslationLanguage)
+            : $this->catalogVocabularyItems($language, $validated['level'] ?? null, $validated['topic'] ?? null, $preferredTranslationLanguage);
+
+        $items = $this->buildRuntimeItems($validated['mode'], $sourceItems);
+        $title = $this->runtimeTitleForMode($validated['mode'], $validated['source_type']);
+
+        $aiResult = app(AiExerciseGenerator::class)->generate(
+            $validated['mode'],
+            $sourceItems,
+            $validated['source_type'],
+            $language,
+            $request->user()?->mother_tongue_code
+        );
+
+        if (is_array($aiResult) && isset($aiResult['items']) && is_array($aiResult['items']) && $aiResult['items'] !== []) {
+            $items = $aiResult['items'];
+            $title = !empty($aiResult['title']) ? (string) $aiResult['title'] : $title;
+            $this->logAiGeneration($request, $validated, $aiResult, 'approved');
+        }
+
+        return response()->json([
+            'ok' => true,
+            'mode' => $validated['mode'],
+            'title' => $title,
+            'items' => $items,
+        ]);
+    }
+
     public function showPage(): View
     {
         if (! $this->exerciseRuntimeSchemaExists()) {
@@ -241,5 +285,257 @@ class ExerciseController extends Controller
             && Schema::hasTable('exercise_items')
             && Schema::hasTable('exercise_options')
             && Schema::hasTable('attempt_answers');
+    }
+
+    private function runtimeTitleForMode(string $mode, string $sourceType): string
+    {
+        $suffix = $sourceType === 'saved' ? 'Lista guardada' : 'Catalogo real';
+
+        return match ($mode) {
+            'reading' => 'Reading · ' . $suffix,
+            'listening' => 'Listening · ' . $suffix,
+            'speaking' => 'Speaking · ' . $suffix,
+            'writing' => 'Writing · ' . $suffix,
+            default => 'Combinado · ' . $suffix,
+        };
+    }
+
+    private function savedVocabularyItems(int $userId, ?string $sourceId, ?string $language, string $preferredTranslationLanguage): array
+    {
+        $query = DB::table('user_words')
+            ->join('words', 'words.id', '=', 'user_words.word_id')
+            ->leftJoin('categories', 'categories.id', '=', 'words.category_id')
+            ->leftJoin('translations', 'translations.source_word_id', '=', 'words.id')
+            ->leftJoin('words as target_words', 'target_words.id', '=', 'translations.target_word_id')
+            ->where('user_words.user_id', $userId)
+            ->select(
+                'user_words.id as user_word_id',
+                'words.id as word_id',
+                'words.text',
+                'words.language_code',
+                'words.cefr_level',
+                'categories.name as topic',
+                'target_words.text as translation',
+                'target_words.language_code as translation_language_code'
+            );
+
+        if ($language) {
+            $query->where('words.language_code', $language);
+        }
+
+        if ($sourceId && $sourceId !== 'library') {
+            $collectionId = (int) $sourceId;
+
+            if ($collectionId > 0) {
+                $query
+                    ->join('collection_words', 'collection_words.word_id', '=', 'words.id')
+                    ->join('collections', 'collections.id', '=', 'collection_words.collection_id')
+                    ->where('collections.user_id', $userId)
+                    ->where('collections.id', $collectionId);
+            }
+        }
+
+        return $query
+            ->orderByDesc('user_words.updated_at')
+            ->limit(120)
+            ->get()
+            ->groupBy('user_word_id')
+            ->map(function ($rows) use ($preferredTranslationLanguage) {
+                $row = $rows->first();
+                $preferredTranslation = collect($rows)
+                    ->first(fn ($item) => $item->translation_language_code === $preferredTranslationLanguage && !empty($item->translation));
+                $fallbackTranslation = collect($rows)->first(fn ($item) => !empty($item->translation));
+
+                return [
+                    'id' => (int) $row->word_id,
+                    'text' => (string) $row->text,
+                    'translation' => (string) (($preferredTranslation->translation ?? null) ?: ($fallbackTranslation->translation ?? '')),
+                    'topic' => $row->topic ? (string) $row->topic : null,
+                    'cefr' => $row->cefr_level ? strtoupper((string) $row->cefr_level) : null,
+                ];
+            })
+            ->filter(fn ($item) => !empty($item['text']))
+            ->values()
+            ->all();
+    }
+
+    private function catalogVocabularyItems(?string $language, ?string $level, ?string $topic, string $preferredTranslationLanguage): array
+    {
+        $query = DB::table('words')
+            ->leftJoin('categories', 'categories.id', '=', 'words.category_id')
+            ->leftJoin('translations', 'translations.source_word_id', '=', 'words.id')
+            ->leftJoin('words as target_words', 'target_words.id', '=', 'translations.target_word_id')
+            ->select(
+                'words.id as word_id',
+                'words.text',
+                'words.language_code',
+                'words.cefr_level',
+                'categories.name as topic',
+                'target_words.text as translation',
+                'target_words.language_code as translation_language_code'
+            );
+
+        if ($language) {
+            $query->where('words.language_code', $language);
+        }
+
+        if ($level) {
+            $query->whereRaw('UPPER(words.cefr_level) = ?', [strtoupper($level)]);
+        }
+
+        if ($topic) {
+            $query->where('categories.name', 'like', '%' . trim($topic) . '%');
+        }
+
+        return $query
+            ->orderByDesc('words.updated_at')
+            ->limit(140)
+            ->get()
+            ->groupBy('word_id')
+            ->map(function ($rows) use ($preferredTranslationLanguage) {
+                $row = $rows->first();
+                $preferredTranslation = collect($rows)
+                    ->first(fn ($item) => $item->translation_language_code === $preferredTranslationLanguage && !empty($item->translation));
+                $fallbackTranslation = collect($rows)->first(fn ($item) => !empty($item->translation));
+
+                return [
+                    'id' => (int) $row->word_id,
+                    'text' => (string) $row->text,
+                    'translation' => (string) (($preferredTranslation->translation ?? null) ?: ($fallbackTranslation->translation ?? '')),
+                    'topic' => $row->topic ? (string) $row->topic : null,
+                    'cefr' => $row->cefr_level ? strtoupper((string) $row->cefr_level) : null,
+                ];
+            })
+            ->filter(fn ($item) => !empty($item['text']))
+            ->values()
+            ->all();
+    }
+
+    private function buildRuntimeItems(string $mode, array $sourceItems): array
+    {
+        $withTranslation = collect($sourceItems)
+            ->filter(fn ($item) => !empty($item['text']) && !empty($item['translation']))
+            ->values();
+
+        return match ($mode) {
+            'reading' => $this->buildReadingRuntimeItems($withTranslation->all()),
+            'writing' => $this->buildWritingRuntimeItems($withTranslation->all()),
+            'listening' => $this->buildListeningRuntimeItems($withTranslation->all()),
+            'speaking' => $this->buildSpeakingRuntimeItems($sourceItems),
+            default => $this->buildMixRuntimeItems($sourceItems),
+        };
+    }
+
+    private function buildReadingRuntimeItems(array $items): array
+    {
+        $pool = collect($items)->shuffle()->values();
+        $sourceWords = $pool->pluck('text')->filter()->unique()->values();
+
+        return $pool->take(5)->map(function ($item) use ($sourceWords) {
+            $correct = (string) $item['text'];
+            $wrong = $sourceWords->reject(fn ($candidate) => $candidate === $correct)->take(3)->values()->all();
+            $options = collect(array_merge([$correct], $wrong))->unique()->shuffle()->values();
+            $translationText = !empty($item['translation']) ? (string) $item['translation'] : (string) $item['text'];
+
+            return [
+                'type' => 'mcq',
+                'itemId' => null,
+                'passage' => sprintf('%s%s',
+                    $translationText,
+                    !empty($item['topic']) ? ' · tema: ' . Str::lower((string) $item['topic']) : ''
+                ),
+                'question' => 'Selecciona la palabra correcta en el idioma de aprendizaje',
+                'options' => $options->all(),
+                'correct' => $options->search($correct),
+            ];
+        })->filter(fn ($row) => count($row['options']) >= 2 && $row['correct'] !== false)->values()->all();
+    }
+
+    private function buildWritingRuntimeItems(array $items): array
+    {
+        return collect($items)
+            ->shuffle()
+            ->take(4)
+            ->map(fn ($item) => [
+                'type' => 'translate',
+                'itemId' => null,
+                'prompt' => 'Traduce al idioma objetivo',
+                'sentence' => (string) $item['translation'],
+                'answer' => (string) $item['text'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function buildListeningRuntimeItems(array $items): array
+    {
+        return collect($items)
+            ->shuffle()
+            ->take(3)
+            ->map(fn ($item) => [
+                'type' => 'fillin',
+                'itemId' => null,
+                'transcript' => sprintf('The word "%s" means "%s".', (string) $item['text'], (string) $item['translation']),
+                'question' => 'Completa la frase',
+                'sentence' => sprintf('"%s" in the target language is ________.', (string) $item['translation']),
+                'answer' => (string) $item['text'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function buildSpeakingRuntimeItems(array $items): array
+    {
+        return collect($items)
+            ->shuffle()
+            ->take(5)
+            ->map(fn ($item) => [
+                'type' => 'pronounce',
+                'itemId' => null,
+                'word' => (string) $item['text'],
+                'hint' => !empty($item['translation']) ? (string) $item['translation'] : 'Pronuncia la palabra correctamente',
+            ])
+            ->filter(fn ($item) => !empty($item['word']))
+            ->values()
+            ->all();
+    }
+
+    private function buildMixRuntimeItems(array $items): array
+    {
+        $reading = $this->buildReadingRuntimeItems($items);
+        $writing = $this->buildWritingRuntimeItems($items);
+        $speaking = $this->buildSpeakingRuntimeItems($items);
+        $listening = $this->buildListeningRuntimeItems($items);
+
+        return collect([
+            $reading[0] ?? null,
+            $listening[0] ?? null,
+            $speaking[0] ?? null,
+            $writing[0] ?? null,
+        ])->filter()->values()->all();
+    }
+
+    private function logAiGeneration(Request $request, array $validated, array $aiResult, string $status): void
+    {
+        if (! Schema::hasTable('ai_generations')) {
+            return;
+        }
+
+        DB::table('ai_generations')->insert([
+            'user_id' => $request->user()?->id,
+            'feature' => 'exercise_runtime_' . $validated['mode'],
+            'model' => (string) ($aiResult['model'] ?? 'unknown'),
+            'prompt' => (string) ($aiResult['prompt'] ?? ''),
+            'response' => (string) ($aiResult['response'] ?? ''),
+            'source_language_code' => $request->user()?->mother_tongue_code,
+            'target_language_code' => $validated['language'] ?? null,
+            'status' => $status,
+            'estimated_cost_cents' => (int) ($aiResult['estimated_cost_cents'] ?? 0),
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+            'review_notes' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }
