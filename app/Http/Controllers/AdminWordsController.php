@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Language;
-use App\Models\Translation;
 use App\Models\UserWord;
 use App\Models\Word;
 use Illuminate\Contracts\View\View;
@@ -20,17 +19,20 @@ class AdminWordsController extends Controller
             'language' => ['nullable', 'string', 'max:5'],
         ]);
 
+        $search = trim((string) ($filters['q'] ?? ''));
+        $sourceLanguage = trim((string) ($filters['language'] ?? ''));
+
         $wordsQuery = Word::query()
-            ->with(['category', 'translations.targetWord'])
+            ->with(['category'])
             ->orderBy('language_code')
             ->orderBy('text');
 
-        if ($search = trim((string) ($filters['q'] ?? ''))) {
+        if ($search !== '') {
             $wordsQuery->where('text', 'like', '%' . $search . '%');
         }
 
-        if ($language = $filters['language'] ?? null) {
-            $wordsQuery->where('language_code', $language);
+        if ($sourceLanguage !== '') {
+            $wordsQuery->where('language_code', $sourceLanguage);
         }
 
         $words = $wordsQuery->paginate(20)->withQueryString();
@@ -40,12 +42,11 @@ class AdminWordsController extends Controller
             'words' => $words,
             'languages' => Language::query()->orderBy('name')->get(['code', 'name']),
             'filters' => [
-                'q' => $search ?? '',
-                'language' => $language ?? '',
+                'q' => $search,
+                'language' => $sourceLanguage,
             ],
             'stats' => [
                 'words' => Word::query()->count(),
-                'translations' => Translation::query()->count(),
                 'categories' => Category::query()->count(),
                 'saved_links' => UserWord::query()->count(),
             ],

@@ -6,6 +6,7 @@ use App\Models\Language;
 use App\Models\Translation;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdminTranslationsController extends Controller
 {
@@ -37,6 +38,24 @@ class AdminTranslationsController extends Controller
             ->paginate(20)
             ->withQueryString();
 
+        $replacementChar = "\u{FFFD}";
+
+        $suspiciousSources = DB::table('translations')
+            ->join('words as source_words', 'source_words.id', '=', 'translations.source_word_id')
+            ->where(function ($query) use ($replacementChar): void {
+                $query->where('source_words.text', 'like', '%?%')
+                    ->orWhere('source_words.text', 'like', '%' . $replacementChar . '%');
+            })
+            ->count();
+
+        $suspiciousTargets = DB::table('translations')
+            ->join('words as target_words', 'target_words.id', '=', 'translations.target_word_id')
+            ->where(function ($query) use ($replacementChar): void {
+                $query->where('target_words.text', 'like', '%?%')
+                    ->orWhere('target_words.text', 'like', '%' . $replacementChar . '%');
+            })
+            ->count();
+
         return view('pages.admin-translations', [
             'translations' => $translations,
             'languages' => Language::query()->orderBy('name')->get(['code', 'name']),
@@ -51,6 +70,8 @@ class AdminTranslationsController extends Controller
                 'without_context' => Translation::query()->where(function ($query) {
                     $query->whereNull('context_note')->orWhere('context_note', '');
                 })->count(),
+                'suspicious_sources' => $suspiciousSources,
+                'suspicious_targets' => $suspiciousTargets,
             ],
         ]);
     }

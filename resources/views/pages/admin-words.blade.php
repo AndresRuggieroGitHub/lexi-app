@@ -24,12 +24,12 @@
 
 	<article class="admin-card admin-stat">
 		<div class="admin-stat__row">
-			<span class="admin-chip admin-chip--green">{{ __('lexi.admin.words.translations_chip') }}</span>
-			<div class="admin-stat__icon"><i class="bi bi-translate"></i></div>
+			<span class="admin-chip admin-chip--green">{{ __('lexi.admin.words.categories_chip') }}</span>
+			<div class="admin-stat__icon"><i class="bi bi-tags"></i></div>
 		</div>
-		<p class="admin-stat__value">{{ number_format($stats['translations']) }}</p>
-		<p class="admin-stat__label">{{ __('lexi.admin.words.translations_rows') }}</p>
-		<span class="admin-stat__meta"><i class="bi bi-tags"></i> {{ __('lexi.admin.words.categories_count', ['count' => number_format($stats['categories'])]) }}</span>
+		<p class="admin-stat__value">{{ number_format($stats['categories']) }}</p>
+		<p class="admin-stat__label">{{ __('lexi.admin.words.categories_rows') }}</p>
+		<span class="admin-stat__meta"><i class="bi bi-diagram-3"></i> {{ __('lexi.admin.words.categories_meta') }}</span>
 	</article>
 
 	<article class="admin-card admin-stat">
@@ -52,33 +52,34 @@
 			</div>
 		</div>
 
-		<div class="admin-table-wrap">
-			<table class="admin-table">
-				<tbody>
-					<tr>
-						<th>{{ __('lexi.admin.words.connection') }}</th>
-						<td>{{ $databaseInfo['connection'] }}</td>
-						<th>{{ __('lexi.admin.words.driver') }}</th>
-						<td>{{ $databaseInfo['driver'] }}</td>
-					</tr>
-					<tr>
-						<th>{{ __('lexi.admin.words.database') }}</th>
-						<td>{{ $databaseInfo['database'] ?: __('lexi.admin.words.na') }}</td>
-						<th>{{ __('lexi.admin.words.target') }}</th>
-						<td>{{ strtoupper($databaseInfo['target']) }}</td>
-					</tr>
-					<tr>
-						<th>{{ __('lexi.admin.words.state') }}</th>
-						<td colspan="3">
-							@if ($databaseInfo['is_mysql_like'])
-								<span class="admin-status admin-status--active">{{ __('lexi.admin.words.mysql_active') }}</span>
-							@else
-								<span class="admin-status admin-status--review">{{ __('lexi.admin.words.sqlite_active') }}</span>
-							@endif
-						</td>
-					</tr>
-				</tbody>
-			</table>
+		<div class="admin-db-snapshot" role="region" aria-label="{{ __('lexi.admin.words.database_snapshot') }}">
+			<div class="admin-db-snapshot__grid">
+				<article class="admin-db-kpi">
+					<span class="admin-db-kpi__label">{{ __('lexi.admin.words.connection') }}</span>
+					<p class="admin-db-kpi__value">{{ $databaseInfo['connection'] }}</p>
+				</article>
+				<article class="admin-db-kpi">
+					<span class="admin-db-kpi__label">{{ __('lexi.admin.words.driver') }}</span>
+					<p class="admin-db-kpi__value">{{ strtoupper($databaseInfo['driver']) }}</p>
+				</article>
+				<article class="admin-db-kpi">
+					<span class="admin-db-kpi__label">{{ __('lexi.admin.words.database') }}</span>
+					<p class="admin-db-kpi__value">{{ $databaseInfo['database'] ?: __('lexi.admin.words.na') }}</p>
+				</article>
+			</div>
+
+			<div class="admin-db-state">
+				<div class="admin-db-state__left">
+					<span class="admin-db-state__title">{{ __('lexi.admin.words.state') }}</span>
+					@if ($databaseInfo['is_mysql_like'])
+						<span class="admin-status admin-status--active">{{ __('lexi.admin.words.mysql_active') }}</span>
+					@else
+						<span class="admin-status admin-status--review">{{ __('lexi.admin.words.sqlite_active') }}</span>
+					@endif
+				</div>
+				<span class="admin-db-state__target">{{ __('lexi.admin.words.target') }}: {{ strtoupper($databaseInfo['target']) }}</span>
+			</div>
+
 		</div>
 	</div>
 </section>
@@ -93,12 +94,12 @@
 		</div>
 
 		<form class="row g-3 mb-4" method="get" action="{{ route('admin-words') }}">
-			<div class="col-md-6">
+			<div class="col-md-4">
 				<label class="form-label" for="wordSearch">{{ __('lexi.admin.words.search_word') }}</label>
 				<input class="form-control" id="wordSearch" type="search" name="q" value="{{ $filters['q'] }}" placeholder="{{ __('lexi.admin.words.search_placeholder') }}">
 			</div>
-			<div class="col-md-4">
-				<label class="form-label" for="languageFilter">{{ __('lexi.admin.words.language') }}</label>
+			<div class="col-md-3">
+				<label class="form-label" for="languageFilter">{{ __('lexi.admin.words.source_language') }}</label>
 				<select class="form-select" id="languageFilter" name="language">
 					<option value="">{{ __('lexi.admin.words.all') }}</option>
 					@foreach ($languages as $language)
@@ -106,7 +107,7 @@
 					@endforeach
 				</select>
 			</div>
-			<div class="col-md-2 d-flex align-items-end gap-2">
+			<div class="col-md-5 d-flex align-items-end gap-2">
 				<button class="admin-btn admin-btn--primary w-100" type="submit"><i class="bi bi-search"></i> {{ __('lexi.admin.words.filter') }}</button>
 			</div>
 		</form>
@@ -119,32 +120,23 @@
 						<th>{{ __('lexi.admin.words.table_client_key') }}</th>
 						<th>{{ __('lexi.admin.words.table_word') }}</th>
 						<th>{{ __('lexi.admin.words.language') }}</th>
-						<th>{{ __('lexi.admin.words.table_translation') }}</th>
 						<th>{{ __('lexi.admin.words.table_category') }}</th>
 						<th>{{ __('lexi.admin.words.table_level') }}</th>
-						<th>{{ __('lexi.admin.words.table_status') }}</th>
 					</tr>
 				</thead>
 				<tbody>
 					@forelse ($words as $word)
-						@php
-							$translation = $word->translations->first()?->targetWord?->text;
-							$statusClass = $translation && $word->category && $word->cefr_level ? 'admin-status--active' : ($translation ? 'admin-status--review' : 'admin-status--draft');
-							$statusLabel = $translation && $word->category && $word->cefr_level ? __('lexi.admin.words.status_reviewed') : ($translation ? __('lexi.admin.words.status_pending') : __('lexi.admin.words.status_draft'));
-						@endphp
 						<tr>
 							<td>{{ $word->id }}</td>
 							<td>{{ $word->client_key ?: __('lexi.admin.words.na') }}</td>
 							<td>{{ $word->text }}</td>
 							<td>{{ strtoupper($word->language_code) }}</td>
-							<td>{{ $translation ?: __('lexi.admin.words.no_translation') }}</td>
 							<td>{{ $word->category?->name ?: __('lexi.admin.words.no_category') }}</td>
 							<td>{{ $word->cefr_level ?: __('lexi.admin.words.na') }}</td>
-							<td><span class="admin-status {{ $statusClass }}">{{ $statusLabel }}</span></td>
 						</tr>
 					@empty
 						<tr>
-							<td colspan="8">{{ __('lexi.admin.words.no_rows') }}</td>
+							<td colspan="6">{{ __('lexi.admin.words.no_rows') }}</td>
 						</tr>
 					@endforelse
 				</tbody>
