@@ -7,6 +7,13 @@ body.admin-body {
   overflow-x: hidden;
 }
 
+:root {
+  --admin-accent: var(--brand);
+  --admin-accent-dark: var(--brand-dark);
+  --admin-accent-ink: #8a5a00;
+  --admin-accent-soft: #fff4dd;
+}
+
 .admin-shell {
   min-height: 100vh;
   display: grid;
@@ -226,8 +233,8 @@ body.admin-body {
 
 .admin-btn--primary {
   color: #fff;
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-  box-shadow: 0 16px 28px rgba(109, 40, 217, 0.2);
+  background: linear-gradient(135deg, var(--admin-accent) 0%, var(--admin-accent-dark) 100%);
+  box-shadow: 0 16px 28px rgba(249, 178, 51, 0.26);
 }
 
 .admin-btn--ghost {
@@ -309,8 +316,8 @@ body.admin-body {
 }
 
 .admin-chip--violet {
-  color: #6d28d9;
-  background: #f3ecff;
+  color: var(--admin-accent-ink);
+  background: var(--admin-accent-soft);
 }
 
 .admin-chip--green {
@@ -342,7 +349,7 @@ body.admin-body {
   place-items: center;
   color: #fff;
   font-size: 1.15rem;
-  background: linear-gradient(135deg, #7c3aed, #f59e0b);
+  background: linear-gradient(135deg, var(--admin-accent-dark), var(--admin-accent));
 }
 
 .admin-stat__value {
@@ -452,8 +459,8 @@ body.admin-body {
 }
 
 .admin-status--draft {
-  color: #6d28d9;
-  background: #f3ecff;
+  color: var(--admin-accent-ink);
+  background: var(--admin-accent-soft);
 }
 
 .admin-actions-inline {
@@ -521,7 +528,7 @@ body.admin-body {
 }
 
 .admin-entity-card--selectable:focus-visible {
-  outline: 2px solid #6d28d9;
+  outline: 2px solid var(--admin-accent-dark);
   outline-offset: -2px;
 }
 
@@ -531,8 +538,8 @@ body.admin-body {
   border-radius: 16px;
   display: grid;
   place-items: center;
-  color: #6d28d9;
-  background: #f3ecff;
+  color: var(--admin-accent-ink);
+  background: var(--admin-accent-soft);
   font-size: 1.15rem;
 }
 
@@ -569,14 +576,14 @@ body.admin-body {
 }
 
 .admin-inline-link {
-  color: #6d28d9;
+  color: var(--admin-accent-ink);
   text-decoration: none;
   font-size: 0.84rem;
   font-weight: 700;
 }
 
 .admin-entity-card__arrow {
-  color: #6d28d9;
+  color: var(--admin-accent-ink);
   font-size: 1.15rem;
   line-height: 1;
 }
@@ -624,8 +631,8 @@ body.admin-body {
 
 .admin-main .pagination .page-item.active .page-link {
   color: #fff;
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-  border-color: #6d28d9;
+  background: linear-gradient(135deg, var(--admin-accent) 0%, var(--admin-accent-dark) 100%);
+  border-color: var(--admin-accent-dark);
 }
 
 .admin-main .pagination .page-item.disabled .page-link {
