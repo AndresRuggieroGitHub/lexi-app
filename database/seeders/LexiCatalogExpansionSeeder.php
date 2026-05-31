@@ -117,6 +117,8 @@ class LexiCatalogExpansionSeeder extends Seeder
             ['text' => 'civilizational discourse', 'cefr' => 'C2', 'topic' => 'culture'],
             ['text' => 'anthropocene trajectory', 'cefr' => 'C2', 'topic' => 'nature'],
             ['text' => 'jurisdictional fragmentation', 'cefr' => 'C2', 'topic' => 'law'],
+            ['text' => 'procedural legitimacy', 'cefr' => 'C2', 'topic' => 'politics'],
+            ['text' => 'hydrometeorological anomaly', 'cefr' => 'C2', 'topic' => 'science'],
         ];
     }
 
