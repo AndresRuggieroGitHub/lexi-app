@@ -17,6 +17,7 @@
   let serverCollections = [];
   let serverCatalog = [];
   let serverLibraryLoadPromise = null;
+  let librarySearchReady = false;
   let serverProgressState = null;
   let serverProgressLoadPromise = null;
   let serverProgressLanguage = null;
@@ -181,6 +182,10 @@
     const grid = document.querySelector("[data-library-grid]");
     if (!grid || !Array.isArray(catalog) || !catalog.length) return false;
 
+    if (!librarySearchReady) {
+      grid.style.visibility = "hidden";
+    }
+
     grid.innerHTML = catalog.map((item) => {
       const cefr = String(item.cefr || "").toUpperCase();
       const topic = String(item.topic || "");
@@ -206,6 +211,10 @@
     document.getElementById("noResults")?.setAttribute("hidden", "hidden");
     if (document.getElementById("libraryPagination")) {
       document.getElementById("libraryPagination").innerHTML = "";
+    }
+
+    if (librarySearchReady) {
+      grid.style.visibility = "";
     }
 
     return true;
@@ -2352,6 +2361,11 @@
       renderPage();
 
       if (noResults) noResults.hidden = filteredCards.length > 0;
+
+      const grid = document.querySelector("[data-library-grid]");
+      if (grid) {
+        grid.style.visibility = "";
+      }
     };
 
     if (!isBound) {
@@ -2363,6 +2377,7 @@
     }
 
     applyFilters();
+    librarySearchReady = true;
   };
 
   const setupLangDropdown = () => {
@@ -2795,7 +2810,6 @@
     if (canUseServerSession) {
       setPageLoading(true);
       await window.lexiSessionReady;
-      setPageLoading(false);
     } else {
       syncActiveLangFlag();
     }
@@ -2818,6 +2832,7 @@
       window.addEventListener("lexi-lang-changed", () => {
         serverLibrary = [];
         serverCatalog = [];
+        librarySearchReady = false;
         loadServerLibrary();
       });
     }
@@ -2828,7 +2843,7 @@
     setupProgressPage();
     updateCartBadges();
     setupProfileLangChips();
-    if (canUseServerSession) {
+    if (canUseServerSession || hasServerLibrary) {
       setPageLoading(false);
     }
   };

@@ -1586,6 +1586,21 @@ img {
   min-height: 300px;
 }
 
+.ex-content--enter {
+  animation: ex-content-enter 260ms ease;
+}
+
+@keyframes ex-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .ex-loading-state {
   min-height: 300px;
   display: flex;
@@ -1632,6 +1647,39 @@ img {
   line-height: 1.7;
   margin-bottom: 1.5rem;
   color: var(--text);
+}
+
+.ex-passage-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.65rem;
+}
+
+.ex-passage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.62rem;
+  border-radius: 999px;
+  background: #e9f2ff;
+  color: #1d4ed8;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.ex-passage-context {
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.ex-passage--sentence {
+  font-size: 1.02rem;
+  line-height: 1.72;
+  border-left-color: #f59e0b;
+  background: #fffdf6;
 }
 
 .ex-question {
@@ -1795,6 +1843,21 @@ img {
   font-size: 0.9rem;
   color: var(--muted);
   flex: 1;
+}
+
+.ex-audio-play {
+  white-space: nowrap;
+}
+
+.ex-audio-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.ex-audio-rate {
+  min-width: 78px;
 }
 
 .ex-transcript-toggle {
@@ -2185,33 +2248,116 @@ img {
   border-top: 1px solid var(--line);
 }
 
-/* Modal completado */
-.ex-complete-modal {
+.ex-complete-inline {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 50vh;
-  padding: 2rem 1rem;
+  width: 100%;
+  min-height: calc(100vh - 260px);
+  margin: 0 auto;
+  padding: 2rem 1rem 1.2rem;
 }
 
-.ex-complete-box {
+.ex-complete-content {
+  position: relative;
+  z-index: 2;
   text-align: center;
-  max-width: 400px;
+  width: min(100%, 780px);
+  padding: 0.6rem 0.4rem;
 }
 
-.ex-complete-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
+.ex-complete-content h2 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  margin: 0 0 0.95rem;
+  color: #142033;
+  text-shadow: 0 6px 22px rgba(255, 255, 255, 0.86);
+  opacity: 1;
+  transform: translateY(0);
 }
 
-.ex-complete-box h2 {
-  font-size: 1.6rem;
-  margin-bottom: 0.5rem;
+.ex-complete-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.2;
+  transition: opacity 0.35s ease;
 }
 
-.ex-complete-box p {
-  color: var(--muted);
-  margin-bottom: 1.5rem;
+.ex-complete-bg.is-stopped {
+  opacity: 0 !important;
+}
+
+.ex-complete-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ex-complete-bg--main {
+  z-index: 0;
+  mix-blend-mode: normal;
+  opacity: 0.26;
+}
+
+.ex-complete-bg--main img {
+  object-position: center;
+  filter: saturate(1.05) contrast(1.02);
+}
+
+.ex-complete-bg--cannon {
+  z-index: 1;
+  opacity: 0.22;
+}
+
+.ex-complete-bg--cannon img {
+  object-fit: contain;
+  object-position: center;
+  transform: scale(1.03);
+}
+
+.ex-complete-inline.is-visible .ex-complete-bg--main {
+  animation: ex-complete-bg-fade 1.05s ease both;
+}
+
+.ex-complete-inline.is-visible .ex-complete-bg--cannon {
+  animation: ex-complete-cannon-bg-fade 1.15s ease 0.08s both;
+}
+
+.ex-complete-inline.is-visible .ex-complete-content h2 {
+  animation: ex-complete-title-fade 1.05s ease 0.18s both;
+}
+
+@keyframes ex-complete-title-fade {
+  0% {
+    opacity: 0.45;
+    transform: translateY(10px);
+    letter-spacing: 0.015em;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    letter-spacing: 0;
+  }
+}
+
+@keyframes ex-complete-bg-fade {
+  0% {
+    opacity: 0.08;
+  }
+  100% {
+    opacity: 0.26;
+  }
+}
+
+@keyframes ex-complete-cannon-bg-fade {
+  0% {
+    opacity: 0.08;
+  }
+  100% {
+    opacity: 0.22;
+  }
 }
 
 /* ===== INFO ===== */

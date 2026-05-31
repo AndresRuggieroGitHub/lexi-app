@@ -77,25 +77,13 @@
       <div class="ex-progress-bar" id="exProgressBar"></div>
     </div>
     <div id="exerciseContent" class="ex-content"></div>
-    <div class="ex-nav-btns">
+    <div class="ex-nav-btns" id="exNavBtns">
       <button class="btn btn-outline-secondary" id="btnPrevEx" disabled>
         <i class="bi bi-arrow-left"></i> {{ __('lexi.exercises.previous') }}
       </button>
       <button class="btn btn-primary" id="btnNextEx">
         {{ __('lexi.exercises.next') }} <i class="bi bi-arrow-right"></i>
       </button>
-    </div>
-  </div>
-
-  <div id="exCompleteModal" class="ex-complete-modal" hidden>
-    <div class="ex-complete-box">
-      <div class="ex-complete-icon">🎉</div>
-      <h2>{{ __('lexi.exercises.completed') }}</h2>
-      <p id="exCompleteMsg"></p>
-      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-outline-secondary" id="btnRepeat">{{ __('lexi.exercises.repeat') }}</button>
-        <button class="btn btn-primary" id="btnBackFromComplete">{{ __('lexi.exercises.choose_other_mode') }}</button>
-      </div>
     </div>
   </div>
 
@@ -149,6 +137,7 @@
   const EXERCISE_CATALOG_TOPIC_KEY = 'lexiExerciseCatalogTopic';
   const CEFR_LEVELS = Array.isArray(SHARED_CEFR_LEVELS) && SHARED_CEFR_LEVELS.length ? SHARED_CEFR_LEVELS : ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   let serverVocabularyState = { library: { id: 'library', name: t('saved_name'), items: [] }, collections: [], catalog: [] };
+  let serverVocabularyLanguage = null;
   let exerciseSourceSwitchInFlight = false;
 
   function setExerciseCollectionsLoading(isLoading, message = t('loading_options')) {
@@ -260,13 +249,22 @@
     return SHARED_TOPIC_OPTIONS;
   }
 
-  async function loadVocabularySources(message = t('loading_options'), showSpinner = false) {
+  async function loadVocabularySources(message = t('loading_options'), showSpinner = false, forceReload = false) {
+    const activeLang = getActiveLang();
+    const hasCachedState = Array.isArray(serverVocabularyState.catalog)
+      && Array.isArray(serverVocabularyState.collections)
+      && serverVocabularyLanguage === activeLang;
+
+    if (!forceReload && hasCachedState) {
+      return;
+    }
+
     if (showSpinner) {
       setExerciseCollectionsLoading(true, message);
     }
 
     try {
-      const response = await exerciseApiFetch('/api/library/state');
+      const response = await exerciseApiFetch('/api/library/state?language=' + encodeURIComponent(activeLang));
       if (!response.ok) throw new Error('library-state-error');
       const payload = await response.json();
       serverVocabularyState = {
@@ -278,12 +276,14 @@
         collections: Array.isArray(payload.collections) ? payload.collections : [],
         catalog: Array.isArray(payload.catalog) ? payload.catalog : [],
       };
+      serverVocabularyLanguage = activeLang;
     } catch {
       serverVocabularyState = {
         library: { id: 'library', name: t('saved_name'), items: [] },
         collections: [],
         catalog: [],
       };
+      serverVocabularyLanguage = activeLang;
     } finally {
       if (showSpinner) {
         setExerciseCollectionsLoading(false);
@@ -518,28 +518,27 @@
   }
 
   function buildCustomReadingItems(items, difficultyLevel = 'B1') {
-    const wordBank = items
-      .map(item => item.text || item.word || '')
-      .filter(Boolean);
     const optionsLimit = ['A1', 'A2'].includes(difficultyLevel) ? 3 : 4;
-    const question = ['A1', 'A2'].includes(difficultyLevel)
-      ? 'Choose the correct word to complete the sentence.'
-      : ['B1', 'B2'].includes(difficultyLevel)
-        ? 'Choose the best word to complete the gap naturally and accurately.'
-        : 'Choose the most precise option to complete the gap while preserving register and collocation.';
 
     return items
       .filter(item => item.text && item.translation)
       .slice(0, 5)
       .map(item => {
         const correctAnswer = item.text;
-        const distractors = selectReadingDistractors(wordBank, correctAnswer, Math.max(2, optionsLimit - 1));
+        const distractors = selectReadingDistractors(items, item, Math.max(2, optionsLimit - 1));
         const options = shuffleArray([correctAnswer, ...distractors]).slice(0, optionsLimit);
         const topic = formatTopicLabel(item.topic);
+        const cefr = normalizeCefrLevel(item.cefr) || difficultyLevel;
+        const question = ['A1', 'A2'].includes(cefr)
+          ? 'Choose the best word for the gap.'
+          : ['B1', 'B2'].includes(cefr)
+            ? 'Choose the most natural option for the gap.'
+            : 'Choose the most precise option for the gap.';
+        const sentence = buildReadingGapSentence(topic, correctAnswer, cefr);
 
         return {
           type: 'mcq',
-          passage: `Exam-style multiple-choice cloze (${item.cefr || 'B2'}).\n\nPart 1 task. Context: ${topic}. Intended meaning: "${item.translation}". Gap: The candidate must ________ this idea in accurate formal English.`,
+          passage: `${topic} (${cefr}). ${sentence}`,
           question,
           options,
           correct: options.indexOf(correctAnswer),
@@ -549,16 +548,16 @@
 
   function buildCustomWritingItems(items, difficultyLevel = 'B1') {
     const prompt = ['A1', 'A2'].includes(difficultyLevel)
-      ? 'Translate into clear everyday English.'
+      ? 'Write one natural sentence in English for this situation.'
       : ['B1', 'B2'].includes(difficultyLevel)
-        ? 'Cambridge-style sentence transformation. Keep meaning and register.'
-        : 'Cambridge-style transformation. Preserve meaning, formal register, and lexical precision.';
+        ? 'Write one polished sentence in English. Keep the original meaning and tone.'
+        : 'Write one precise C-level sentence in English. Keep meaning, register, and lexical accuracy.';
 
     return items
       .map(item => ({
         type: 'translate',
         prompt,
-        sentence: `Rewrite in English (${formatTopicLabel(item.topic)} context): ${item.translation || item.meaning || ''}`,
+        sentence: `${buildWritingScenario(formatTopicLabel(item.topic), difficultyLevel)} Context source: "${item.translation || item.meaning || ''}"`,
         answer: item.text || item.word || '',
       }))
       .filter(item => item.sentence && item.answer)
@@ -567,8 +566,8 @@
 
   function buildCustomListeningItems(items, difficultyLevel = 'B1') {
     const question = ['A1', 'A2'].includes(difficultyLevel)
-      ? 'Write the missing word from the audio.'
-      : 'Complete the sentence with the exact word from the recording.';
+      ? 'Listen and type the missing expression.'
+      : 'Type the exact expression you hear.';
 
     return items
       .filter(item => item.text && item.translation)
@@ -576,12 +575,12 @@
       .map(item => ({
         type: 'fillin',
         transcript: ['C1', 'C2'].includes(difficultyLevel)
-          ? `You are listening to a high-level exam briefing about ${String(formatTopicLabel(item.topic)).toLowerCase()}. The speaker states: "Candidates are expected to ${item.text} before the final task so that register, collocation and precision remain consistent throughout the response."`
+          ? `Professional briefing (${String(formatTopicLabel(item.topic)).toLowerCase()}): "Before the panel review, each candidate is expected to ${item.text} to ensure consistency, precision, and register control."`
           : ['A1', 'A2'].includes(difficultyLevel)
-            ? `You hear a short classroom instruction about ${String(formatTopicLabel(item.topic)).toLowerCase()}. The speaker says: "Please ${item.text} before the final task."`
-            : `You are listening to a short exam briefing about ${String(formatTopicLabel(item.topic)).toLowerCase()}. The speaker says: "Candidates should ${item.text} before the final task because this reflects professional register and lexical precision."`,
+            ? `Audio note (${String(formatTopicLabel(item.topic)).toLowerCase()}): "Before we begin, please ${item.text} and then sit near the front."`
+            : `Team voice message (${String(formatTopicLabel(item.topic)).toLowerCase()}): "Before the review starts, everyone should ${item.text} so the discussion stays focused."`,
         question,
-        sentence: `In the ${String(formatTopicLabel(item.topic)).toLowerCase()} briefing, candidates should ________ before the final task (${item.translation}).`,
+        sentence: `In the ${String(formatTopicLabel(item.topic)).toLowerCase()} recording, the speaker says we should ________ before the next step.`,
         answer: item.text,
       }));
   }
@@ -652,27 +651,153 @@
     return clone;
   }
 
-  function selectReadingDistractors(wordBank, correctWord, limit) {
-    const correct = String(correctWord || '').trim().toLowerCase();
+  function selectReadingDistractors(items, currentItem, limit) {
+    const correct = String(currentItem?.text || currentItem?.word || '').trim().toLowerCase();
     if (!correct) return [];
 
-    return Array.from(new Set(
-      (wordBank || [])
-        .map(word => String(word || '').trim())
-        .filter(Boolean)
-        .filter(word => word.toLowerCase() !== correct)
+    const currentTopic = normalizeTopicKey(currentItem?.topic || '');
+    const currentCefr = String(currentItem?.cefr || '').toUpperCase();
+    const correctTokenCount = String(currentItem?.text || currentItem?.word || '').trim().split(/\s+/).filter(Boolean).length;
+    const correctBucket = lexicalBucket(currentItem?.text || currentItem?.word || '');
+
+    const scored = Array.from(new Set(
+      (items || [])
+        .map(item => ({
+          word: String(item?.text || item?.word || '').trim(),
+          topic: normalizeTopicKey(item?.topic || ''),
+          cefr: String(item?.cefr || '').toUpperCase(),
+          bucket: lexicalBucket(item?.text || item?.word || ''),
+        }))
+        .filter(row => row.word)
+        .filter(row => row.word.toLowerCase() !== correct)
     ))
-      .map(word => {
-        const lower = word.toLowerCase();
+      .map(row => {
+        const lower = row.word.toLowerCase();
         const sameInitial = lower[0] === correct[0] ? 3 : 0;
         const lengthDistance = Math.abs(lower.length - correct.length);
         const lengthScore = Math.max(0, 3 - lengthDistance);
+        const tokenCount = row.word.split(/\s+/).filter(Boolean).length;
+        const tokenScore = Math.max(0, 3 - Math.abs(tokenCount - correctTokenCount));
         const editScore = Math.max(0, 8 - levenshteinDistance(correct, lower));
-        return { word, score: sameInitial + lengthScore + editScore };
+        const topicScore = currentTopic && row.topic === currentTopic ? 4 : 0;
+        const cefrScore = currentCefr && row.cefr === currentCefr ? 3 : 0;
+
+        return { word: row.word, bucket: row.bucket, score: sameInitial + lengthScore + tokenScore + editScore + topicScore + cefrScore };
       })
-      .sort((left, right) => right.score - left.score)
+      .sort((left, right) => right.score - left.score);
+
+    let rows = scored
+      .filter(row => row.bucket === correctBucket)
       .slice(0, limit)
       .map(item => item.word);
+
+    if (rows.length < limit) {
+      const curated = curatedDistractorsForBucket(correctBucket, correct);
+      rows = Array.from(new Set([...rows, ...curated])).slice(0, limit);
+    }
+
+    if (rows.length < limit) {
+      const fallback = scored.map(row => row.word);
+      rows = Array.from(new Set([...rows, ...fallback])).slice(0, limit);
+    }
+
+    return rows;
+  }
+
+  function lexicalBucket(word) {
+    const value = String(word || '').trim().toLowerCase();
+    if (!value) return 'other';
+    if (['please', 'hello', 'thanks', 'thank you', 'sorry'].includes(value)) return 'social';
+    if (value.includes(' ')) return 'phrase';
+    if (value.startsWith('to ') || /(ing|ed)$/i.test(value)) return 'verb';
+    if (/(ly)$/i.test(value)) return 'adverb';
+    if (/(ous|ive|al|ful|less|able|ible)$/i.test(value)) return 'adjective';
+    if (/(tion|sion|ment|ness|ity|ship|ance|ence)$/i.test(value)) return 'noun';
+    return 'word';
+  }
+
+  function curatedDistractorsForBucket(bucket, correctLower) {
+    const map = {
+      social: ['please', 'sorry', 'thanks', 'hello', 'excuse me'],
+      phrase: ['make a decision', 'take a break', 'set a goal', 'keep in mind'],
+      verb: ['review', 'prepare', 'organize', 'confirm', 'update'],
+      noun: ['plan', 'report', 'policy', 'strategy', 'schedule'],
+      adjective: ['clear', 'formal', 'effective', 'flexible', 'reliable'],
+      adverb: ['carefully', 'clearly', 'quickly', 'properly', 'regularly'],
+      word: ['option', 'result', 'project', 'issue', 'process'],
+      other: ['option', 'result', 'project', 'issue', 'process'],
+    };
+
+    return (map[bucket] || map.other)
+      .filter(word => word.toLowerCase() !== String(correctLower || '').toLowerCase());
+  }
+
+  function normalizeCefrLevel(value) {
+    const level = String(value || '').trim().toUpperCase();
+    return ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(level) ? level : null;
+  }
+
+  function buildReadingGapSentence(topic, correctWord, difficultyLevel = 'B1') {
+    const key = String(topic || '').toLowerCase();
+    const value = String(correctWord || '').trim();
+    const lower = value.toLowerCase();
+    const isVerbLike = lower.startsWith('to ') || /(ing|ed)$/i.test(lower);
+    const isNounLike = /(tion|sion|ity|ment|ness|ship|ance|ence)$/i.test(lower);
+    const bucket = lexicalBucket(value);
+
+    if (bucket === 'social') {
+      return ['A1', 'A2'].includes(difficultyLevel)
+        ? 'Sentence: In a polite message to your classmate, write: "____, can you send me the file today?"'
+        : 'Sentence: In a professional email opener, complete the line: "____, could you share the updated version before 4 PM?"';
+    }
+
+    if (key.includes('education')) {
+      return isVerbLike
+        ? 'Sentence: Before the seminar starts, students should ____ each key point from the reading so they can contribute with confidence.'
+        : 'Sentence: The lecturer said that a strong ____ helps students connect ideas across the whole unit.';
+    }
+
+    if (key.includes('travel')) {
+      return isVerbLike
+        ? 'Sentence: Before boarding, travelers are advised to ____ all required details so there are no delays at the gate.'
+        : 'Sentence: The agency confirmed that a clear ____ makes the whole trip smoother and less stressful.';
+    }
+
+    if (key.includes('business') || key.includes('work')) {
+      return isVerbLike
+        ? 'Sentence: During the weekly review, the manager asked the team to ____ the proposal before sharing it with the client.'
+        : 'Sentence: In today\'s planning meeting, the team agreed that a clear ____ is essential before launch.';
+    }
+
+    if (key.includes('health')) {
+      return isVerbLike
+        ? 'Sentence: Doctors recommend that patients ____ small daily habits to build better long-term wellbeing.'
+        : 'Sentence: The coach explained that a consistent ____ can improve wellbeing over time.';
+    }
+
+    if (key.includes('culture')) {
+      return isVerbLike
+        ? 'Sentence: The museum team worked together to ____ local history in a way that younger visitors could relate to.'
+        : 'Sentence: The city council funded a new ____ to support local artists and community events.';
+    }
+
+    if (['A1', 'A2'].includes(difficultyLevel)) {
+      return isVerbLike
+        ? 'Sentence: We need to ____ this task before the lesson ends so everyone is ready for tomorrow.'
+        : 'Sentence: We need a clear ____ today so the class can continue without confusion.';
+    }
+
+    if (['C1', 'C2'].includes(difficultyLevel)) {
+      return isVerbLike
+        ? 'Sentence: In the final draft, the proposal should ____ the strategic priorities while preserving precision and formal register.'
+        : 'Sentence: In the final draft, the proposal should present a coherent ____ that aligns with the strategic priorities.';
+    }
+
+    if (isNounLike) {
+      return 'Sentence: In this scenario, the team needs a stronger ____ to explain the decision clearly to stakeholders.';
+    }
+
+    return 'Sentence: In this scenario, the team should ____ the key idea clearly so everyone can act on it.';
   }
 
   function levenshteinDistance(a, b) {
@@ -710,16 +835,29 @@
   function buildSpeakingHint(item, difficultyLevel = 'B1') {
     const topic = formatTopicLabel(item.topic);
     const meaning = item.translation || item.meaning || '';
+    const word = item.text || item.word || '';
 
     if (['A1', 'A2'].includes(difficultyLevel)) {
-      return `Say the word clearly and use it in one short sentence.${meaning ? ' Meaning: ' + meaning : ''}`;
+      return `Say the expression naturally, then use it in one short real-life sentence about ${String(topic).toLowerCase()}.${meaning ? ' Hint: ' + meaning : ''}`;
     }
 
     if (['C1', 'C2'].includes(difficultyLevel)) {
-      return `Exam speaking (${topic}): produce clear stress and connected speech, then use the word in a precise C-level sentence.${meaning ? ' Meaning: ' + meaning : ''}`;
+      return `Give a 20-second formal response on ${String(topic).toLowerCase()} and integrate "${word}" with precise register.${meaning ? ' Hint: ' + meaning : ''}`;
     }
 
-    return `Exam speaking (${topic}): pronounce clearly, stress key syllables, then use it in one formal sentence.${meaning ? ' Meaning: ' + meaning : ''}`;
+    return `Give a 15-second response: use "${word}" once in a fluent sentence about ${String(topic).toLowerCase()}.${meaning ? ' Hint: ' + meaning : ''}`;
+  }
+
+  function buildWritingScenario(topic, difficultyLevel = 'B1') {
+    if (['A1', 'A2'].includes(difficultyLevel)) {
+      return `Scenario (${topic}): You are writing a short message to a classmate.`;
+    }
+
+    if (['C1', 'C2'].includes(difficultyLevel)) {
+      return `Scenario (${topic}): You are drafting a formal sentence for a professional report.`;
+    }
+
+    return `Scenario (${topic}): You are writing one sentence for an email update.`;
   }
 
   function normalizeTemplateExerciseItem(templateType, item, templateTitle) {
@@ -903,23 +1041,47 @@
   })();
 
   async function bootstrapExercises() {
-    if (window.lexiSessionReady) {
-      try {
-        await window.lexiSessionReady;
-      } catch {}
-    }
+    initSpeechVoices();
+    primeUiAudio();
+    const preloadLanguage = getActiveLang();
 
-    resetExerciseSelectionState();
-    await loadVocabularySources();
+    // Render source controls immediately with local fallback data.
     setupExerciseSourceTabs();
     setupExerciseCatalogSelects();
     setupExerciseCollectionSelect();
+    syncSourcePanels();
+
+    const preloadSourcesPromise = loadVocabularySources();
+    const sessionReadyPromise = window.lexiSessionReady && typeof window.lexiSessionReady.then === 'function'
+      ? window.lexiSessionReady
+      : Promise.resolve();
+
+    try {
+      await Promise.allSettled([preloadSourcesPromise, sessionReadyPromise]);
+    } catch {}
+
+    if (preloadLanguage !== getActiveLang()) {
+      await loadVocabularySources(t('loading_options'), false, true);
+    }
+
+    setupExerciseCatalogSelects();
+    setupExerciseCollectionSelect();
+    syncSourcePanels();
   }
 
   bootstrapExercises();
 
+  const primeAudioOnInteraction = () => {
+    primeUiAudio();
+    window.removeEventListener('pointerdown', primeAudioOnInteraction);
+    window.removeEventListener('keydown', primeAudioOnInteraction);
+  };
+
+  window.addEventListener('pointerdown', primeAudioOnInteraction, { passive: true });
+  window.addEventListener('keydown', primeAudioOnInteraction);
+
   window.addEventListener('lexi-lang-changed', async () => {
-    await loadVocabularySources();
+    await loadVocabularySources(t('loading_options'), false, true);
     setupExerciseCatalogSelects();
     setupExerciseCollectionSelect();
     syncSourcePanels();
@@ -1157,16 +1319,6 @@
   document.getElementById('btnBack').addEventListener('click', closePanel);
   document.getElementById('btnNextEx').addEventListener('click', nextExercise);
   document.getElementById('btnPrevEx').addEventListener('click', prevExercise);
-  document.getElementById('btnRepeat').addEventListener('click', () => {
-    document.getElementById('exCompleteModal').hidden = true;
-    currentIndex = 0;
-    document.getElementById('exercisePanel').hidden = false;
-    renderExercise();
-  });
-  document.getElementById('btnBackFromComplete').addEventListener('click', () => {
-    document.getElementById('exCompleteModal').hidden = true;
-    document.getElementById('exerciseMenu').hidden = false;
-  });
 
   async function openMode(mode) {
     currentMode = mode;
@@ -1177,7 +1329,8 @@
 
     document.getElementById('exerciseMenu').hidden = true;
     document.getElementById('exercisePanel').hidden = false;
-    document.getElementById('exCompleteModal').hidden = true;
+    const nav = document.getElementById('exNavBtns');
+    if (nav) nav.hidden = false;
     renderExerciseLoading(fallbackModeData.title);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -1212,6 +1365,202 @@
   function closePanel() {
     document.getElementById('exercisePanel').hidden = true;
     document.getElementById('exerciseMenu').hidden = false;
+    const nav = document.getElementById('exNavBtns');
+    if (nav) nav.hidden = false;
+  }
+
+  const uiAudio = {
+    ctx: null,
+    enabled: true,
+    fxEnabled: false,
+    speechRate: 0.92,
+    speechPitch: 1,
+    preferredVoice: null,
+    voicesInitialized: false,
+    sfxEnabled: true,
+    sfxFiles: {
+      success: '/audio/sfx/answer-correct.mp3',
+      error: '/audio/sfx/answer-incorrect.mp3',
+      complete: '/audio/sfx/exercise-complete.mp3',
+      pair: '/audio/sfx/pair-correct.mp3',
+    },
+    sfxCache: {},
+    primed: false,
+  };
+
+  function primeUiAudio() {
+    if (!uiAudio.sfxEnabled || uiAudio.primed) return;
+
+    Object.entries(uiAudio.sfxFiles).forEach(([type, src]) => {
+      if (!src || uiAudio.sfxCache[type]) return;
+      try {
+        const audio = new Audio(src);
+        audio.preload = 'auto';
+        audio.load();
+        uiAudio.sfxCache[type] = audio;
+      } catch {
+      }
+    });
+
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    uiAudio.primed = true;
+  }
+
+  function playUiSfx(type) {
+    if (!uiAudio.sfxEnabled) return false;
+
+    const src = uiAudio.sfxFiles[type];
+    if (!src) return false;
+
+    try {
+      let audio = uiAudio.sfxCache[type];
+      if (!audio) {
+        audio = new Audio(src);
+        audio.preload = 'auto';
+        audio.load();
+        uiAudio.sfxCache[type] = audio;
+      }
+
+      const target = audio.paused ? audio : audio.cloneNode(true);
+      target.currentTime = 0;
+      const promise = target.play();
+      if (promise && typeof promise.catch === 'function') {
+        promise.catch(() => {});
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function getAudioContext() {
+    if (!uiAudio.enabled) return null;
+    try {
+      if (!uiAudio.ctx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        uiAudio.ctx = new Ctx();
+      }
+      return uiAudio.ctx;
+    } catch {
+      uiAudio.enabled = false;
+      return null;
+    }
+  }
+
+  function playUiTone(type) {
+    const playedSfx = playUiSfx(type);
+    if (playedSfx) return;
+    if (!uiAudio.fxEnabled) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = type === 'success' ? 'triangle' : type === 'error' ? 'sawtooth' : 'sine';
+
+    if (type === 'success') {
+      oscillator.frequency.setValueAtTime(620, now);
+      oscillator.frequency.linearRampToValueAtTime(880, now + 0.12);
+    } else if (type === 'error') {
+      oscillator.frequency.setValueAtTime(300, now);
+      oscillator.frequency.linearRampToValueAtTime(180, now + 0.16);
+    } else {
+      oscillator.frequency.setValueAtTime(470, now);
+      oscillator.frequency.linearRampToValueAtTime(520, now + 0.08);
+    }
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + (type === 'error' ? 0.2 : 0.16));
+
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + (type === 'error' ? 0.22 : 0.18));
+  }
+
+  function playIncorrectFeedback(itemType) {
+    if (['mcq', 'fillin', 'pronounce', 'translate'].includes(String(itemType || ''))) {
+      playUiTone('error');
+    }
+  }
+
+  function resolveSpeechVoice(langCode) {
+    if (!('speechSynthesis' in window)) return null;
+
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+
+    const normalizedLang = String(langCode || 'en').toLowerCase();
+    const wantedPrefix = normalizedLang === 'en' ? 'en' : normalizedLang;
+
+    const scoreVoice = (voice) => {
+      const name = String(voice.name || '').toLowerCase();
+      const lang = String(voice.lang || '').toLowerCase();
+      let score = 0;
+
+      if (lang.startsWith(wantedPrefix)) score += 8;
+      if (voice.default) score += 3;
+      if (/neural|natural|premium/.test(name)) score += 6;
+      if (/microsoft|google|samantha|alex/.test(name)) score += 4;
+      if (/compact|espeak|festival/.test(name)) score -= 4;
+
+      return score;
+    };
+
+    return [...voices].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] || null;
+  }
+
+  function initSpeechVoices() {
+    if (uiAudio.voicesInitialized || !('speechSynthesis' in window)) return;
+    uiAudio.voicesInitialized = true;
+
+    const assignVoice = () => {
+      uiAudio.preferredVoice = resolveSpeechVoice(getActiveLang());
+    };
+
+    assignVoice();
+    window.speechSynthesis.onvoiceschanged = assignVoice;
+  }
+
+  function speakTranscript(text) {
+    if (!('speechSynthesis' in window)) return;
+
+    try {
+      initSpeechVoices();
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(String(text || ''));
+      const activeLang = String(getActiveLang() || 'en').toLowerCase();
+      utterance.lang = activeLang === 'en' ? 'en-US' : `${activeLang}-${activeLang.toUpperCase()}`;
+      utterance.rate = uiAudio.speechRate;
+      utterance.pitch = uiAudio.speechPitch;
+      utterance.voice = uiAudio.preferredVoice || resolveSpeechVoice(activeLang);
+      window.speechSynthesis.speak(utterance);
+    } catch {
+    }
+  }
+
+  function parseReadingPassage(passage) {
+    const raw = String(passage || '').trim();
+    if (!raw) {
+      return { scenario: '', sentence: '' };
+    }
+
+    const parts = raw.match(/^(.*?)\.\s*Sentence:\s*(.+)$/i);
+    if (!parts) {
+      return { scenario: raw, sentence: '' };
+    }
+
+    return {
+      scenario: parts[1].trim(),
+      sentence: parts[2].trim(),
+    };
   }
 
   function renderExercise() {
@@ -1231,6 +1580,8 @@
 
     const content = document.getElementById('exerciseContent');
     content.innerHTML = '';
+    content.classList.remove('ex-content--enter');
+    requestAnimationFrame(() => content.classList.add('ex-content--enter'));
 
     if (item.type === 'mcq') renderMCQ(content, item);
     else if (item.type === 'fillin') renderFillin(content, item);
@@ -1262,9 +1613,14 @@
   }
 
   function renderMCQ(container, item) {
+    const readingView = parseReadingPassage(item.passage);
+    const scenarioHtml = readingView.scenario ? '<div class="ex-passage-meta"><span class="ex-passage-chip"><i class="bi bi-journal-text"></i> Scenario</span><span class="ex-passage-context"> · ' + readingView.scenario + '</span></div>' : '';
+    const sentenceHtml = readingView.sentence ? '<div class="ex-passage ex-passage--sentence">' + readingView.sentence + '</div>' : '<div class="ex-passage">' + item.passage + '</div>';
+
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-book"></i> ' + t('reading_label') + '</p>' +
-      '<div class="ex-passage">' + item.passage + '</div>' +
+      scenarioHtml +
+      sentenceHtml +
       '<p class="ex-question">' + item.question + '</p>' +
       '<div class="ex-options">' +
       item.options.map((opt, i) =>
@@ -1282,6 +1638,7 @@
         container.querySelectorAll('.ex-option').forEach(b => b.disabled = true);
         if (idx === item.correct) {
           this.classList.add('ex-option--correct');
+          playUiTone('success');
           feedback.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + t('correct');
           feedback.className = 'ex-feedback ex-feedback--ok';
           markExerciseItemResult(container, true, {
@@ -1296,6 +1653,7 @@
         } else {
           this.classList.add('ex-option--wrong');
           container.querySelectorAll('.ex-option')[item.correct].classList.add('ex-option--correct');
+          playIncorrectFeedback(item.type);
           feedback.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + t('incorrect_reference', { answer: '<strong>' + item.options[item.correct] + '</strong>' });
           feedback.className = 'ex-feedback ex-feedback--err';
           markExerciseItemResult(container, false, {
@@ -1319,6 +1677,15 @@
       '<div class="ex-audio-mock">' +
       '<div class="ex-audio-wave"><span></span><span></span><span></span><span></span><span></span></div>' +
       '<span class="ex-audio-label">' + t('simulated_audio') + '</span>' +
+      '<div class="ex-audio-controls">' +
+      '<button class="btn btn-outline-secondary btn-sm ex-audio-play" type="button"><i class="bi bi-play-fill"></i> ' + tx('play_audio', 'Play audio') + '</button>' +
+      '<button class="btn btn-outline-secondary btn-sm ex-audio-stop" type="button"><i class="bi bi-stop-fill"></i> ' + tx('stop_audio', 'Stop') + '</button>' +
+      '<select class="form-select form-select-sm ex-audio-rate" aria-label="Playback speed">' +
+      '<option value="0.85">0.85x</option>' +
+      '<option value="0.92" selected>0.92x</option>' +
+      '<option value="1">1x</option>' +
+      '</select>' +
+      '</div>' +
       '</div>' +
       '<button class="ex-transcript-toggle">' + t('show_transcript') + ' <i class="bi ' + t('close_transcript_icon_down') + '"></i></button>' +
       '<div class="ex-transcript" hidden>' + item.transcript + '</div>' +
@@ -1335,10 +1702,39 @@
         : t('hide_transcript') + ' <i class="bi ' + t('close_transcript_icon_up') + '"></i>';
     });
 
+    const playBtn = container.querySelector('.ex-audio-play');
+    const stopBtn = container.querySelector('.ex-audio-stop');
+    const rateSelect = container.querySelector('.ex-audio-rate');
+
+    if (rateSelect) {
+      rateSelect.value = String(uiAudio.speechRate);
+      rateSelect.addEventListener('change', () => {
+        const parsed = Number(rateSelect.value);
+        if (!Number.isNaN(parsed) && parsed > 0.6 && parsed < 1.4) {
+          uiAudio.speechRate = parsed;
+        }
+      });
+    }
+
+    if (playBtn) {
+      playBtn.addEventListener('click', () => {
+        speakTranscript(item.transcript || item.sentence || '');
+      });
+    }
+
+    if (stopBtn) {
+      stopBtn.addEventListener('click', () => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      });
+    }
+
     container.querySelector('.ex-check-btn').addEventListener('click', () => {
       const val = container.querySelector('.ex-input').value.trim().toLowerCase();
       const feedback = container.querySelector('.ex-feedback');
       if (val === item.answer.toLowerCase()) {
+        playUiTone('success');
         feedback.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + t('correct');
         feedback.className = 'ex-feedback ex-feedback--ok';
         markExerciseItemResult(container, true, {
@@ -1350,6 +1746,7 @@
           feedback: t('correct'),
         });
       } else {
+        playIncorrectFeedback(item.type);
         feedback.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + t('answer_is', { answer: '<strong>"' + item.answer + '"</strong>' });
         feedback.className = 'ex-feedback ex-feedback--err';
         markExerciseItemResult(container, false, {
@@ -1393,9 +1790,11 @@
       const icon = this.querySelector('i');
       const label = this.querySelector('span');
       if (this.classList.contains('recording')) {
+        playUiTone('neutral');
         icon.className = 'bi bi-stop-fill';
         label.textContent = t('recording');
       } else {
+        playUiTone('neutral');
         icon.className = 'bi bi-mic';
         label.textContent = t('press_to_speak');
         selfCheck.hidden = false;
@@ -1403,6 +1802,7 @@
     });
 
     container.querySelector('.ex-self-yes').addEventListener('click', () => {
+      playUiTone('success');
       markExerciseItemResult(container, true, {
         itemId: item.itemId,
         itemType: item.type,
@@ -1414,6 +1814,7 @@
       selfCheck.innerHTML = '<p class="ex-feedback ex-feedback--ok" style="display:block"><i class="bi bi-check-circle-fill"></i> ' + t('self_check_success') + '</p>';
     });
     container.querySelector('.ex-self-no').addEventListener('click', () => {
+      playUiTone('neutral');
       selfCheck.hidden = true;
       micBtn.classList.remove('recording');
       micBtn.querySelector('i').className = 'bi bi-mic';
@@ -1436,6 +1837,7 @@
       const keywords = item.answer.toLowerCase().split(' ').filter(w => w.length > 3);
       const matches = keywords.filter(k => val.includes(k)).length;
       if (val.length > 0 && matches >= Math.ceil(keywords.length * 0.65)) {
+        playUiTone('success');
         feedback.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + t('great_reference', { answer: '<em>"' + item.answer + '"</em>' });
         feedback.className = 'ex-feedback ex-feedback--ok';
         markExerciseItemResult(container, true, {
@@ -1447,9 +1849,11 @@
           feedback: t('correct'),
         });
       } else if (val.length === 0) {
+        playUiTone('neutral');
         feedback.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> ' + t('write_answer_first');
         feedback.className = 'ex-feedback ex-feedback--warn';
       } else {
+        playUiTone('error');
         feedback.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + t('reference_answer', { answer: '<em>"' + item.answer + '"</em>' });
         feedback.className = 'ex-feedback ex-feedback--err';
         markExerciseItemResult(container, false, {
@@ -1498,6 +1902,7 @@
     const selfCheck = container.querySelector('.ex-self-check');
 
     showBtn.addEventListener('click', () => {
+      playUiTone('neutral');
       showBtn.disabled = true;
       card.dataset.visible = '1';
       back.hidden = false;
@@ -1512,6 +1917,7 @@
     });
 
     container.querySelector('.ex-flashcard-yes').addEventListener('click', () => {
+      playUiTone('success');
       markExerciseItemResult(container, true, {
         itemId: item.itemId,
         itemType: item.type,
@@ -1549,7 +1955,7 @@
     const deadlineAt = startedAt + (timeLimitSeconds * 1000);
     const matchedLeft = new Set();
     const matchedRight = new Set();
-    const connections = [];
+    const solvedPairs = [];
     let selectedLeft = null;
     let selectedRight = null;
     let mistakes = 0;
@@ -1567,12 +1973,10 @@
         '<div class="ex-matching-column" data-column="left"></div>' +
         '<div class="ex-matching-column" data-column="right"></div>' +
       '</div>' +
-      '<div class="ex-matching-connections" aria-live="polite"></div>' +
       '<div class="ex-feedback" hidden></div>';
 
     const leftColumn = container.querySelector('[data-column="left"]');
     const rightColumn = container.querySelector('[data-column="right"]');
-    const connectionList = container.querySelector('.ex-matching-connections');
     const feedback = container.querySelector('.ex-feedback');
     const timerEl = container.querySelector('.ex-match-timer');
     const countEl = container.querySelector('.ex-match-count');
@@ -1608,6 +2012,7 @@
         feedback.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + tx('matching_timeout', 'Time is over. Try again to beat the clock.');
         feedback.className = 'ex-feedback ex-feedback--warn';
       } else if (success) {
+        playUiTone('success');
         feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + tx('matching_success', 'Great speed. Challenge completed.');
         feedback.className = 'ex-feedback ex-feedback--ok';
       }
@@ -1618,7 +2023,7 @@
         itemType: item.type,
         prompt: item.question,
         expectedAnswer: JSON.stringify(pairs),
-        answerText: JSON.stringify(connections),
+        answerText: JSON.stringify(solvedPairs),
         answerPayload: { mistakes, score, elapsed_seconds: elapsedSeconds, timed_out: timedOut },
         pointsObtained: score / 100,
         feedback: success ? tx('correct', 'Correcto!') : tx('incorrect', 'Incorrecto'),
@@ -1641,19 +2046,10 @@
       }
     };
 
-    const refreshConnectionList = () => {
+    const syncPairCount = () => {
       if (countEl) {
-        countEl.textContent = connections.length + '/' + totalPairs;
+        countEl.textContent = matchedLeft.size + '/' + totalPairs;
       }
-
-      if (!connections.length) {
-        connectionList.innerHTML = '<span class="ex-matching-placeholder">' + tx('matching_pending', 'Conexiones pendientes...') + '</span>';
-        return;
-      }
-
-      connectionList.innerHTML = connections
-        .map(connection => '<span class="ex-match-pill"><strong>' + connection.left + '</strong> <i class="bi bi-arrow-right"></i> ' + connection.right + '</span>')
-        .join('');
     };
 
     const selectLeft = (button, value) => {
@@ -1678,24 +2074,21 @@
 
       const isCorrectMatch = expected.get(selectedLeft) === selectedRight;
       if (isCorrectMatch) {
+        playUiTone('pair');
         matchedLeft.add(selectedLeft);
         matchedRight.add(selectedRight);
-        connections.push({ left: selectedLeft, right: selectedRight });
-        feedback.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + tx('correct', 'Correcto!');
-        feedback.className = 'ex-feedback ex-feedback--ok';
+        solvedPairs.push({ left: selectedLeft, right: selectedRight });
       } else {
         mistakes += 1;
-        feedback.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + tx('matching_wrong_pair', 'Esa pareja no coincide. Intenta otra.');
-        feedback.className = 'ex-feedback ex-feedback--err';
       }
 
-      feedback.hidden = false;
+      feedback.hidden = true;
       selectedLeft = null;
       selectedRight = null;
       leftColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
       rightColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
       paintMatchedButtons();
-      refreshConnectionList();
+      syncPairCount();
 
       if (matchedLeft.size === pairs.length) {
         finishGame(true, false);
@@ -1736,7 +2129,7 @@
       rightColumn.appendChild(button);
     });
 
-    refreshConnectionList();
+    syncPairCount();
     updateTimer();
     timerId = window.setInterval(updateTimer, 250);
   }
@@ -1755,8 +2148,10 @@
       { id: 'b-' + index, pairId: index, text: pair.back },
     ])));
 
-    let selectedCardId = null;
-    let lockBoard = false;
+    const mismatchRevealMs = Math.max(1500, Math.min(2200, previewMs + 700));
+    let activePair = [];
+    let resolvingMismatch = false;
+    let mismatchTimeout = null;
     let moves = 0;
     const matchedPairs = new Set();
     const startedAt = Date.now();
@@ -1804,11 +2199,31 @@
       renderCards();
     };
 
+    const hideActivePair = () => {
+      activePair.forEach((id) => {
+        const state = cardState.get(id);
+        if (state && !state.matched) {
+          state.revealed = false;
+        }
+      });
+
+      activePair = [];
+      resolvingMismatch = false;
+      if (mismatchTimeout !== null) {
+        clearTimeout(mismatchTimeout);
+        mismatchTimeout = null;
+      }
+      renderCards();
+    };
+
     const finishMemory = () => {
       const elapsedSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
       const score = Math.max(0, Math.round(100 - ((moves - pairs.length) * 6)));
       const success = matchedPairs.size === pairs.length;
 
+      if (success) {
+        playUiTone('success');
+      }
       feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + tx('memory_success', 'All pairs completed. Great focus.');
       feedback.className = 'ex-feedback ex-feedback--ok';
       feedback.hidden = false;
@@ -1826,46 +2241,50 @@
     };
 
     const handleCardClick = (cardId) => {
-      if (lockBoard) return;
+      if (resolvingMismatch && activePair.length === 2) {
+        hideActivePair();
+        return;
+      }
 
       const state = cardState.get(cardId);
       if (!state || state.matched || state.revealed) return;
 
       setCardRevealed(cardId, true);
 
-      if (!selectedCardId) {
-        selectedCardId = cardId;
-        window.setTimeout(() => {
-          const selectedState = selectedCardId ? cardState.get(selectedCardId) : null;
-          if (selectedState && !selectedState.matched && selectedState.revealed) {
-            selectedState.revealed = false;
-            selectedCardId = null;
-            renderCards();
-          }
-        }, previewMs);
+      if (!activePair.length) {
+        activePair = [cardId];
         return;
       }
 
-      if (selectedCardId === cardId) {
+      if (activePair[0] === cardId) {
         return;
       }
+
+      if (activePair.length >= 2) {
+        hideActivePair();
+        return;
+      }
+
+      activePair.push(cardId);
 
       moves += 1;
       syncMeta();
 
-      const firstId = selectedCardId;
+      const firstId = activePair[0];
       const first = cardState.get(firstId);
-      const second = cardState.get(cardId);
-      selectedCardId = null;
+      const second = cardState.get(activePair[1]);
 
       if (!first || !second) return;
 
       if (first.pairId === second.pairId) {
+        playUiTone('success');
         first.matched = true;
         second.matched = true;
         first.revealed = true;
         second.revealed = true;
         matchedPairs.add(first.pairId);
+        activePair = [];
+        resolvingMismatch = false;
         renderCards();
         syncMeta();
 
@@ -1875,13 +2294,10 @@
         return;
       }
 
-      lockBoard = true;
-      window.setTimeout(() => {
-        first.revealed = false;
-        second.revealed = false;
-        lockBoard = false;
-        renderCards();
-      }, Math.max(450, previewMs - 200));
+      resolvingMismatch = true;
+      mismatchTimeout = window.setTimeout(() => {
+        hideActivePair();
+      }, mismatchRevealMs);
     };
 
     renderCards();
@@ -1889,14 +2305,58 @@
   }
 
   function showCompletion() {
+    playUiTone('complete');
     registerExerciseAttempt();
 
-    document.getElementById('exercisePanel').hidden = true;
-    const modal = document.getElementById('exCompleteModal');
-    const modeData = currentModeData || getModeData(currentMode);
-    document.getElementById('exCompleteMsg').textContent =
-      t('completed_all', { title: modeData.title });
-    modal.hidden = false;
+    const content = document.getElementById('exerciseContent');
+    const nav = document.getElementById('exNavBtns');
+    if (nav) nav.hidden = true;
+
+    content.innerHTML =
+      '<section class="ex-complete-inline is-visible" aria-live="polite">' +
+        '<div class="ex-complete-bg ex-complete-bg--main" aria-hidden="true">' +
+          '<img src="/images/ui/completion-celebration.gif" alt="" loading="lazy" decoding="async">' +
+        '</div>' +
+        '<div class="ex-complete-bg ex-complete-bg--cannon" aria-hidden="true">' +
+          '<img src="/images/ui/Confetti_Cannon.gif" alt="" loading="lazy" decoding="async">' +
+        '</div>' +
+        '<div class="ex-complete-content">' +
+          '<h2>' + tx('completed', '¡Seccion completada!') + '</h2>' +
+          '<div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">' +
+            '<button class="btn btn-outline-secondary" id="btnRepeatInline">' + tx('repeat', 'Repetir') + '</button>' +
+            '<button class="btn btn-primary" id="btnBackInline">' + tx('choose_other_mode', 'Elegir otro modo') + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</section>';
+
+    const completeSection = content.querySelector('.ex-complete-inline');
+    if (completeSection) {
+      // GIF does not support CSS loop control; hide layers after one visible cycle.
+      window.setTimeout(() => {
+        completeSection.querySelectorAll('.ex-complete-bg').forEach(layer => {
+          layer.classList.add('is-stopped');
+        });
+      }, 3200);
+    }
+
+    const repeatBtn = document.getElementById('btnRepeatInline');
+    if (repeatBtn) {
+      repeatBtn.addEventListener('click', () => {
+        currentIndex = 0;
+        if (nav) nav.hidden = false;
+        renderExercise();
+      });
+    }
+
+    const backBtn = document.getElementById('btnBackInline');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        if (nav) nav.hidden = false;
+        document.getElementById('exercisePanel').hidden = true;
+        document.getElementById('exerciseMenu').hidden = false;
+      });
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 })();

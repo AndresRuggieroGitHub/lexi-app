@@ -87,7 +87,24 @@ class ExerciseController extends Controller
             ]);
         }
 
-        $templates = DB::table('exercise_templates')
+        $templateIds = DB::table('exercise_templates')
+            ->whereIn('type', ['reading', 'listening', 'speaking', 'writing', 'flashcards', 'matching', 'mix'])
+            ->orderBy('updated_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->limit(60)
+            ->pluck('id')
+            ->all();
+
+        if ($templateIds === []) {
+            return view('pages.ejercicios', [
+                'normalizedTemplates' => [],
+            ]);
+        }
+
+        $cacheKey = 'lexi:exercise:templates:' . md5(implode(',', $templateIds));
+
+        $templates = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($templateIds) {
+            return DB::table('exercise_templates')
             ->leftJoin('exercise_items', 'exercise_items.template_id', '=', 'exercise_templates.id')
             ->leftJoin('exercise_options', 'exercise_options.item_id', '=', 'exercise_items.id')
             ->select(
@@ -108,7 +125,7 @@ class ExerciseController extends Controller
                 'exercise_options.is_correct',
                 'exercise_options.option_order'
             )
-            ->whereIn('exercise_templates.type', ['reading', 'listening', 'speaking', 'writing', 'flashcards', 'matching', 'mix'])
+            ->whereIn('exercise_templates.id', $templateIds)
             ->orderBy('exercise_templates.updated_at', 'desc')
             ->orderBy('exercise_templates.id', 'desc')
             ->orderBy('exercise_items.item_order')
@@ -159,6 +176,7 @@ class ExerciseController extends Controller
             ->groupBy('type')
             ->map(fn ($rows) => $rows->values()->all())
             ->all();
+        });
 
         return view('pages.ejercicios', [
             'normalizedTemplates' => $templates,
@@ -550,41 +568,37 @@ class ExerciseController extends Controller
 
     private function buildReadingRuntimeItems(array $items, string $difficultyLevel = 'B1'): array
     {
-        $pool = collect($items)->shuffle()->values();
-        $sourceWords = $pool
-            ->pluck('text')
-            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
-            ->map(fn ($word) => trim((string) $word))
-            ->unique()
+        $pool = collect($items)
+            ->filter(fn ($item) => !empty($item['text']))
+            ->shuffle()
             ->values();
         $optionsLimit = match ($difficultyLevel) {
             'A1', 'A2' => 3,
             default => 4,
         };
-        $question = match ($difficultyLevel) {
-            'A1', 'A2' => 'Choose the correct word to complete the sentence.',
-            'B1', 'B2' => 'Choose the best word to complete the gap naturally and accurately.',
-            default => 'Choose the most precise option to complete the gap while preserving register and collocation.',
-        };
-
-        return $pool->take(5)->map(function ($item) use ($sourceWords, $optionsLimit, $question) {
+        return $pool->take(5)->map(function ($item) use ($pool, $optionsLimit, $difficultyLevel) {
             $correct = (string) $item['text'];
-            $wrong = $this->selectReadingDistractors($sourceWords->all(), $correct, max(2, $optionsLimit - 1));
+            $wrong = $this->selectReadingDistractorsForItem($pool->all(), $item, max(2, $optionsLimit - 1));
             $options = collect(array_merge([$correct], $wrong))->unique()->take($optionsLimit)->shuffle()->values();
 
             if ($options->count() < 2) {
                 return null;
             }
 
-            $translationText = !empty($item['translation']) ? (string) $item['translation'] : (string) $item['text'];
             $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
-            $cefr = !empty($item['cefr']) ? strtoupper((string) $item['cefr']) : 'B2';
-            $contextLine = $this->readingContextLine($translationText, $topic);
+            $itemCefr = $this->normalizeCefrLevel((string) ($item['cefr'] ?? ''));
+            $cefr = $itemCefr ?? $difficultyLevel;
+            $question = match ($cefr) {
+                'A1', 'A2' => 'Choose the best word for the gap.',
+                'B1', 'B2' => 'Choose the most natural option for the gap.',
+                default => 'Choose the most precise option for the gap.',
+            };
+            $gapSentence = $this->readingGapSentence($topic, $correct, $cefr);
 
             return [
                 'type' => 'mcq',
                 'itemId' => null,
-                'passage' => "Exam style multiple-choice cloze ({$cefr}).\n\n{$contextLine}",
+                'passage' => sprintf('%s (%s). %s', $topic, $cefr, $gapSentence),
                 'question' => $question,
                 'options' => $options->all(),
                 'correct' => $options->search($correct),
@@ -607,16 +621,17 @@ class ExerciseController extends Controller
 
                 $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
                 $prompt = match ($difficultyLevel) {
-                    'A1', 'A2' => 'Translate into clear everyday English.',
-                    'B1', 'B2' => 'Cambridge-style sentence transformation. Keep meaning and register.',
-                    default => 'Cambridge-style transformation. Preserve meaning, formal register, and lexical precision.',
+                    'A1', 'A2' => 'Write one natural sentence in English for this situation.',
+                    'B1', 'B2' => 'Write one polished sentence in English. Keep the original meaning and tone.',
+                    default => 'Write one precise C-level sentence in English. Keep meaning, register, and lexical accuracy.',
                 };
+                $scenario = $this->writingScenario($topic, $difficultyLevel);
 
                 return [
                     'type' => 'translate',
                     'itemId' => null,
                     'prompt' => $prompt,
-                    'sentence' => sprintf('Rewrite in English (%s context): %s', $topic, $translation),
+                    'sentence' => sprintf('%s Context source: "%s"', $scenario, $translation),
                     'answer' => $answer,
                 ];
             })
@@ -640,13 +655,13 @@ class ExerciseController extends Controller
 
                 $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
                 $transcriptTemplate = match ($difficultyLevel) {
-                    'A1', 'A2' => 'You hear a short classroom instruction about %s. The speaker says: "Please %s before the final task."',
-                    'B1', 'B2' => 'You are listening to a short exam briefing about %s. The speaker says: "Candidates should %s before the final task because this reflects professional register and lexical precision."',
-                    default => 'You are listening to a high-level exam briefing about %s. The speaker states: "Candidates are expected to %s before the final task so that register, collocation and precision remain consistent throughout the response."',
+                    'A1', 'A2' => 'Audio note (%s): "Before we begin, please %s and then sit near the front."',
+                    'B1', 'B2' => 'Team voice message (%s): "Before the review starts, everyone should %s so the discussion stays focused."',
+                    default => 'Professional briefing (%s): "Before the panel review, each candidate is expected to %s to ensure consistency, precision, and register control."',
                 };
                 $question = match ($difficultyLevel) {
-                    'A1', 'A2' => 'Write the missing word from the audio.',
-                    default => 'Complete the sentence with the exact word from the recording.',
+                    'A1', 'A2' => 'Listen and type the missing expression.',
+                    default => 'Type the exact expression you hear.',
                 };
 
                 return [
@@ -654,7 +669,7 @@ class ExerciseController extends Controller
                     'itemId' => null,
                     'transcript' => sprintf($transcriptTemplate, Str::lower($topic), $answer),
                     'question' => $question,
-                    'sentence' => sprintf('In the %s briefing, candidates should ________ before the final task (%s).', Str::lower($topic), $translation),
+                    'sentence' => sprintf('In the %s recording, the speaker says we should ________ before the next step.', Str::lower($topic)),
                     'answer' => $answer,
                 ];
             })
@@ -678,9 +693,9 @@ class ExerciseController extends Controller
                 $translation = !empty($item['translation']) ? (string) $item['translation'] : null;
                 $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
                 $hint = match ($difficultyLevel) {
-                    'A1', 'A2' => sprintf('Say the word clearly and use it in one short sentence.%s', $translation ? ' Meaning: ' . $translation : ''),
-                    'B1', 'B2' => sprintf('Exam speaking (%s): pronounce clearly, stress key syllables, then use it in one formal sentence.%s', $topic, $translation ? ' Meaning: ' . $translation : ''),
-                    default => sprintf('Exam speaking (%s): produce clear stress and connected speech, then use the word in a precise C-level sentence.%s', $topic, $translation ? ' Meaning: ' . $translation : ''),
+                    'A1', 'A2' => sprintf('Say the expression naturally, then use it in one short real-life sentence about %s.%s', Str::lower($topic), $translation ? ' Hint: ' . $translation : ''),
+                    'B1', 'B2' => sprintf('Give a 15-second response: use "%s" once in a fluent sentence about %s.%s', $word, Str::lower($topic), $translation ? ' Hint: ' . $translation : ''),
+                    default => sprintf('Give a 20-second formal response on %s and integrate "%s" with precise register.%s', Str::lower($topic), $word, $translation ? ' Hint: ' . $translation : ''),
                 };
 
                 return [
@@ -715,18 +730,199 @@ class ExerciseController extends Controller
         return Str::title(str_replace(['_', '-'], ' ', trim($topic)));
     }
 
-    private function readingContextLine(string $translationText, string $topic): string
+    private function readingGapSentence(string $topic, string $correctWord, string $difficultyLevel = 'B1'): string
     {
-        $frames = [
-            'Part 1 task. Complete the sentence with the most precise lexical choice.',
-            'Part 1 task. Select the option that best matches meaning and collocation.',
-            'Part 1 task. Choose the word that keeps the register natural and professional.',
-            'Part 1 task. Pick the word that fits both grammar and tone.',
-        ];
+        $word = trim($correctWord);
+        $isVerbLike = Str::startsWith(mb_strtolower($word), 'to ')
+            || preg_match('/(ing|ed)$/iu', $word) === 1;
+        $isNounLike = preg_match('/(tion|sion|ity|ment|ness|ship|ance|ence)$/iu', $word) === 1;
+        $bucket = $this->lexicalBucket($word);
 
-        $frame = $frames[array_rand($frames)];
+        if ($bucket === 'social') {
+            return in_array($difficultyLevel, ['A1', 'A2'], true)
+                ? 'Sentence: In a polite message to your classmate, write: "____, can you send me the file today?"'
+                : 'Sentence: In a professional email opener, complete the line: "____, could you share the updated version before 4 PM?"';
+        }
 
-        return sprintf('%s Context: %s. Intended meaning: "%s". Gap: The candidate must ________ this idea in accurate exam English.', $frame, $topic, $translationText);
+        $topicKey = Str::lower(trim($topic));
+
+        if (str_contains($topicKey, 'education')) {
+            return $isVerbLike
+                ? 'Sentence: Before the seminar starts, students should ____ each key point from the reading so they can contribute with confidence.'
+                : 'Sentence: The lecturer said that a strong ____ helps students connect ideas across the whole unit.';
+        }
+
+        if (str_contains($topicKey, 'travel')) {
+            return $isVerbLike
+                ? 'Sentence: Before boarding, travelers are advised to ____ all required details so there are no delays at the gate.'
+                : 'Sentence: The agency confirmed that a clear ____ makes the whole trip smoother and less stressful.';
+        }
+
+        if (str_contains($topicKey, 'business') || str_contains($topicKey, 'work')) {
+            return $isVerbLike
+                ? 'Sentence: During the weekly review, the manager asked the team to ____ the proposal before sharing it with the client.'
+                : 'Sentence: In today\'s planning meeting, the team agreed that a clear ____ is essential before launch.';
+        }
+
+        if (str_contains($topicKey, 'health')) {
+            return $isVerbLike
+                ? 'Sentence: Doctors recommend that patients ____ small daily habits to build better long-term wellbeing.'
+                : 'Sentence: The coach explained that a consistent ____ can improve wellbeing over time.';
+        }
+
+        if (str_contains($topicKey, 'culture')) {
+            return $isVerbLike
+                ? 'Sentence: The museum team worked together to ____ local history in a way that younger visitors could relate to.'
+                : 'Sentence: The city council funded a new ____ to support local artists and community events.';
+        }
+
+        if (in_array($difficultyLevel, ['A1', 'A2'], true)) {
+            return $isVerbLike
+                ? 'Sentence: We need to ____ this task before the lesson ends so everyone is ready for tomorrow.'
+                : 'Sentence: We need a clear ____ today so the class can continue without confusion.';
+        }
+
+        if (in_array($difficultyLevel, ['C1', 'C2'], true)) {
+            return $isVerbLike
+                ? 'Sentence: In the final draft, the proposal should ____ the strategic priorities while preserving precision and formal register.'
+                : 'Sentence: In the final draft, the proposal should present a coherent ____ that aligns with the strategic priorities.';
+        }
+
+        if ($isNounLike) {
+            return 'Sentence: In this scenario, the team needs a stronger ____ to explain the decision clearly to stakeholders.';
+        }
+
+        return 'Sentence: In this scenario, the team should ____ the key idea clearly so everyone can act on it.';
+    }
+
+    private function writingScenario(string $topic, string $difficultyLevel = 'B1'): string
+    {
+        if (in_array($difficultyLevel, ['A1', 'A2'], true)) {
+            return sprintf('Scenario (%s): You are writing a short message to a classmate.', $topic);
+        }
+
+        if (in_array($difficultyLevel, ['C1', 'C2'], true)) {
+            return sprintf('Scenario (%s): You are drafting a formal sentence for a professional report.', $topic);
+        }
+
+        return sprintf('Scenario (%s): You are writing one sentence for an email update.', $topic);
+    }
+
+    private function selectReadingDistractorsForItem(array $sourceItems, array $currentItem, int $limit): array
+    {
+        $correct = trim((string) ($currentItem['text'] ?? ''));
+
+        if ($correct === '') {
+            return [];
+        }
+
+        $targetTopic = mb_strtolower(trim((string) ($currentItem['topic'] ?? '')));
+        $targetCefr = mb_strtoupper(trim((string) ($currentItem['cefr'] ?? '')));
+        $correctTokenCount = $this->tokenCount($correct);
+        $correctBucket = $this->lexicalBucket($correct);
+
+        $scored = collect($sourceItems)
+            ->filter(fn ($item) => is_array($item) && !empty($item['text']))
+            ->map(function ($item) use ($targetTopic, $targetCefr, $correct, $correctTokenCount) {
+                $word = trim((string) ($item['text'] ?? ''));
+
+                if ($word === '' || mb_strtolower($word) === mb_strtolower($correct)) {
+                    return null;
+                }
+
+                $topic = mb_strtolower(trim((string) ($item['topic'] ?? '')));
+                $cefr = mb_strtoupper(trim((string) ($item['cefr'] ?? '')));
+                $sameInitial = mb_substr(mb_strtolower($word), 0, 1) === mb_substr(mb_strtolower($correct), 0, 1) ? 3 : 0;
+                $lengthDistance = abs(mb_strlen($word) - mb_strlen($correct));
+                $lengthScore = max(0, 3 - $lengthDistance);
+                $tokenDistance = abs($this->tokenCount($word) - $correctTokenCount);
+                $tokenScore = max(0, 3 - $tokenDistance);
+                $editScore = max(0, 8 - levenshtein(mb_strtolower($correct), mb_strtolower($word)));
+                $topicScore = ($topic !== '' && $targetTopic !== '' && $topic === $targetTopic) ? 4 : 0;
+                $cefrScore = ($cefr !== '' && $targetCefr !== '' && $cefr === $targetCefr) ? 3 : 0;
+
+                return [
+                    'word' => $word,
+                    'bucket' => $this->lexicalBucket($word),
+                    'score' => $sameInitial + $lengthScore + $tokenScore + $editScore + $topicScore + $cefrScore,
+                ];
+            })
+            ->filter(fn ($row) => is_array($row))
+            ->sortByDesc('score')
+            ->values();
+
+        $rows = $scored
+            ->filter(fn ($row) => ($row['bucket'] ?? 'other') === $correctBucket)
+            ->pluck('word')
+            ->unique()
+            ->take($limit)
+            ->values()
+            ->all();
+
+        if (count($rows) < $limit) {
+            $fallbackRows = $scored
+                ->pluck('word')
+                ->unique()
+                ->values()
+                ->all();
+
+            $rows = collect(array_merge($rows, $fallbackRows))
+                ->unique()
+                ->take($limit)
+                ->values()
+                ->all();
+        }
+
+        return $rows;
+    }
+
+    private function lexicalBucket(string $word): string
+    {
+        $value = trim(mb_strtolower($word));
+
+        if ($value === '') {
+            return 'other';
+        }
+
+        if (in_array($value, ['please', 'hello', 'thanks', 'thank you', 'sorry'], true)) {
+            return 'social';
+        }
+
+        if (str_contains($value, ' ')) {
+            return 'phrase';
+        }
+
+        if (Str::startsWith($value, 'to ') || preg_match('/(ing|ed)$/u', $value) === 1) {
+            return 'verb';
+        }
+
+        if (preg_match('/(ly)$/u', $value) === 1) {
+            return 'adverb';
+        }
+
+        if (preg_match('/(ous|ive|al|ful|less|able|ible)$/u', $value) === 1) {
+            return 'adjective';
+        }
+
+        if (preg_match('/(tion|sion|ment|ness|ity|ship|ance|ence)$/u', $value) === 1) {
+            return 'noun';
+        }
+
+        return 'word';
+    }
+
+    private function normalizeCefrLevel(string $level): ?string
+    {
+        $value = strtoupper(trim($level));
+
+        return in_array($value, ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'], true) ? $value : null;
+    }
+
+    private function tokenCount(string $text): int
+    {
+        $chunks = preg_split('/\s+/u', trim($text)) ?: [];
+
+        return count(array_filter($chunks, fn ($chunk) => $chunk !== ''));
     }
 
     private function selectReadingDistractors(array $sourceWords, string $correctWord, int $limit): array
