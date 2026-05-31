@@ -61,6 +61,7 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             LexiCatalogSeeder::class,
+            LexiCatalogExpansionSeeder::class,
             BillingSeeder::class,
             AiGenerationSeeder::class,
             ExtendedDomainSeeder::class,

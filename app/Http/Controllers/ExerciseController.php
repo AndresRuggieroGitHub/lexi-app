@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -30,8 +31,16 @@ class ExerciseController extends Controller
         $sourceItems = $validated['source_type'] === 'saved'
             ? $this->savedVocabularyItems($request->user()->id, $validated['source_id'] ?? null, $language, $preferredTranslationLanguage)
             : $this->catalogVocabularyItems($language, $validated['level'] ?? null, $validated['topic'] ?? null, $preferredTranslationLanguage);
+        $sourceItems = $this->restrictSourceItemsToSingleLanguage($sourceItems, $language);
+        $sourceItems = $this->shuffleAvoidingRecentWords(
+            $request->user()->id,
+            $validated['mode'],
+            $validated['source_type'],
+            $validated['source_id'] ?? null,
+            $sourceItems
+        );
 
-        $items = $this->buildRuntimeItems($validated['mode'], $sourceItems);
+        $items = $this->buildRuntimeItems($validated['mode'], $sourceItems, $validated['level'] ?? null);
         $title = $this->runtimeTitleForMode($validated['mode'], $validated['source_type']);
 
         $aiRuntimeEnabled = (bool) config('services.openai.exercise_runtime_enabled', false);
@@ -43,7 +52,8 @@ class ExerciseController extends Controller
                 $sourceItems,
                 $validated['source_type'],
                 $language,
-                $request->user()?->mother_tongue_code
+                $request->user()?->mother_tongue_code,
+                $validated['level'] ?? null
             )
             : null;
 
@@ -52,6 +62,14 @@ class ExerciseController extends Controller
             $title = !empty($aiResult['title']) ? (string) $aiResult['title'] : $title;
             $this->logAiGeneration($request, $validated, $aiResult, 'approved');
         }
+
+        $this->rememberRecentlyUsedWords(
+            $request->user()->id,
+            $validated['mode'],
+            $validated['source_type'],
+            $validated['source_id'] ?? null,
+            $items
+        );
 
         return response()->json([
             'ok' => true,
@@ -296,16 +314,16 @@ class ExerciseController extends Controller
 
     private function runtimeTitleForMode(string $mode, string $sourceType): string
     {
-        $suffix = $sourceType === 'saved' ? 'Lista guardada' : 'Catalogo real';
+        $suffix = $sourceType === 'saved' ? 'Tus listas' : 'Catalogo';
 
         return match ($mode) {
-            'reading' => 'Reading · ' . $suffix,
-            'listening' => 'Listening · ' . $suffix,
-            'speaking' => 'Speaking · ' . $suffix,
-            'writing' => 'Writing · ' . $suffix,
-            'flashcards' => 'Flashcards · ' . $suffix,
-            'matching' => 'Matching · ' . $suffix,
-            default => 'Desafio · ' . $suffix,
+            'reading' => 'Reading Exam Practice · ' . $suffix,
+            'listening' => 'Listening Exam Practice · ' . $suffix,
+            'speaking' => 'Speaking Exam Practice · ' . $suffix,
+            'writing' => 'Writing Exam Practice · ' . $suffix,
+            'flashcards' => 'Lexical Recall Drill · ' . $suffix,
+            'matching' => 'Collocation Match Drill · ' . $suffix,
+            default => 'Cambridge Challenge · ' . $suffix,
         };
     }
 
@@ -345,25 +363,27 @@ class ExerciseController extends Controller
         }
 
         return $query
-            ->orderByDesc('user_words.updated_at')
-            ->limit(120)
+            ->orderByRaw($this->randomOrderExpression())
+            ->limit(260)
             ->get()
             ->groupBy('user_word_id')
             ->map(function ($rows) use ($preferredTranslationLanguage) {
                 $row = $rows->first();
                 $preferredTranslation = collect($rows)
                     ->first(fn ($item) => $item->translation_language_code === $preferredTranslationLanguage && !empty($item->translation));
-                $fallbackTranslation = collect($rows)->first(fn ($item) => !empty($item->translation));
 
                 return [
                     'id' => (int) $row->word_id,
                     'text' => (string) $row->text,
-                    'translation' => (string) (($preferredTranslation->translation ?? null) ?: ($fallbackTranslation->translation ?? '')),
+                    'translation' => (string) ($preferredTranslation->translation ?? ''),
+                    'language' => (string) ($row->language_code ?? ''),
                     'topic' => $row->topic ? (string) $row->topic : null,
                     'cefr' => $row->cefr_level ? strtoupper((string) $row->cefr_level) : null,
                 ];
             })
             ->filter(fn ($item) => !empty($item['text']))
+            ->shuffle()
+            ->take(120)
             ->values()
             ->all();
     }
@@ -397,43 +417,47 @@ class ExerciseController extends Controller
         }
 
         return $query
-            ->orderByDesc('words.updated_at')
-            ->limit(140)
+            ->orderByRaw($this->randomOrderExpression())
+            ->limit(320)
             ->get()
             ->groupBy('word_id')
             ->map(function ($rows) use ($preferredTranslationLanguage) {
                 $row = $rows->first();
                 $preferredTranslation = collect($rows)
                     ->first(fn ($item) => $item->translation_language_code === $preferredTranslationLanguage && !empty($item->translation));
-                $fallbackTranslation = collect($rows)->first(fn ($item) => !empty($item->translation));
 
                 return [
                     'id' => (int) $row->word_id,
                     'text' => (string) $row->text,
-                    'translation' => (string) (($preferredTranslation->translation ?? null) ?: ($fallbackTranslation->translation ?? '')),
+                    'translation' => (string) ($preferredTranslation->translation ?? ''),
+                    'language' => (string) ($row->language_code ?? ''),
                     'topic' => $row->topic ? (string) $row->topic : null,
                     'cefr' => $row->cefr_level ? strtoupper((string) $row->cefr_level) : null,
                 ];
             })
             ->filter(fn ($item) => !empty($item['text']))
+            ->shuffle()
+            ->take(140)
             ->values()
             ->all();
     }
 
-    private function buildRuntimeItems(string $mode, array $sourceItems): array
+    private function buildRuntimeItems(string $mode, array $sourceItems, ?string $requestedLevel = null): array
     {
         $withTranslation = collect($sourceItems)
             ->filter(fn ($item) => !empty($item['text']) && !empty($item['translation']))
             ->values();
 
+        $effectiveLevel = $this->resolveDifficultyLevel($requestedLevel, $sourceItems);
+
         return match ($mode) {
-            'reading' => $this->buildReadingRuntimeItems($withTranslation->all()),
-            'writing' => $this->buildWritingRuntimeItems($withTranslation->all()),
-            'listening' => $this->buildListeningRuntimeItems($withTranslation->all()),
-            'speaking' => $this->buildSpeakingRuntimeItems($sourceItems),
+            'reading' => $this->buildReadingRuntimeItems($withTranslation->all(), $effectiveLevel),
+            'writing' => $this->buildWritingRuntimeItems($withTranslation->all(), $effectiveLevel),
+            'listening' => $this->buildListeningRuntimeItems($withTranslation->all(), $effectiveLevel),
+            'speaking' => $this->buildSpeakingRuntimeItems($sourceItems, $effectiveLevel),
             'flashcards' => $this->buildFlashcardRuntimeItems($withTranslation->all()),
-            'matching' => $this->buildMatchingRuntimeItems($withTranslation->all()),
-            default => $this->buildMixRuntimeItems($sourceItems),
+            'matching' => $this->buildMatchingRuntimeItems($withTranslation->all(), $effectiveLevel),
+            default => $this->buildMixRuntimeItems($withTranslation->all(), $effectiveLevel),
         };
     }
 
@@ -455,7 +479,7 @@ class ExerciseController extends Controller
             ->all();
     }
 
-    private function buildMatchingRuntimeItems(array $items): array
+    private function buildMatchingRuntimeItems(array $items, string $difficultyLevel = 'B1'): array
     {
         $pairs = collect($items)
             ->shuffle()
@@ -473,105 +497,418 @@ class ExerciseController extends Controller
             return [];
         }
 
+        $timePerPair = match ($difficultyLevel) {
+            'A1', 'A2' => 8,
+            'B1' => 7,
+            'B2' => 6,
+            default => 5,
+        };
+
         return [[
             'type' => 'match',
             'itemId' => null,
-            'question' => 'Conecta cada palabra con su traduccion correcta',
+            'question' => 'Match the pairs as fast as possible. Faster time means better score.',
             'pairs' => $pairs,
+            'time_limit_seconds' => max(35, min(95, count($pairs) * $timePerPair)),
         ]];
     }
 
-    private function buildReadingRuntimeItems(array $items): array
+    private function buildMemoryRuntimeItems(array $items, string $difficultyLevel = 'B1'): array
+    {
+        $pairs = collect($items)
+            ->shuffle()
+            ->map(fn ($item) => [
+                'front' => (string) $item['text'],
+                'back' => (string) $item['translation'],
+            ])
+            ->filter(fn ($pair) => $pair['front'] !== '' && $pair['back'] !== '')
+            ->unique(fn ($pair) => mb_strtolower($pair['front']))
+            ->take(18)
+            ->values()
+            ->all();
+
+        if (count($pairs) < 4) {
+            return [];
+        }
+
+        $previewMs = match ($difficultyLevel) {
+            'A1', 'A2' => 1500,
+            'B1' => 1200,
+            'B2' => 900,
+            default => 700,
+        };
+
+        return [[
+            'type' => 'memory',
+            'itemId' => null,
+            'question' => 'Memory Matrix: find all translation pairs with the fewest moves.',
+            'pairs' => $pairs,
+            'grid_columns' => count($pairs) >= 12 ? 6 : 4,
+            'preview_ms' => $previewMs,
+        ]];
+    }
+
+    private function buildReadingRuntimeItems(array $items, string $difficultyLevel = 'B1'): array
     {
         $pool = collect($items)->shuffle()->values();
-        $sourceWords = $pool->pluck('text')->filter()->unique()->values();
+        $sourceWords = $pool
+            ->pluck('text')
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => trim((string) $word))
+            ->unique()
+            ->values();
+        $optionsLimit = match ($difficultyLevel) {
+            'A1', 'A2' => 3,
+            default => 4,
+        };
+        $question = match ($difficultyLevel) {
+            'A1', 'A2' => 'Choose the correct word to complete the sentence.',
+            'B1', 'B2' => 'Choose the best word to complete the gap naturally and accurately.',
+            default => 'Choose the most precise option to complete the gap while preserving register and collocation.',
+        };
 
-        return $pool->take(5)->map(function ($item) use ($sourceWords) {
+        return $pool->take(5)->map(function ($item) use ($sourceWords, $optionsLimit, $question) {
             $correct = (string) $item['text'];
-            $wrong = $sourceWords->reject(fn ($candidate) => $candidate === $correct)->take(3)->values()->all();
-            $options = collect(array_merge([$correct], $wrong))->unique()->shuffle()->values();
+            $wrong = $this->selectReadingDistractors($sourceWords->all(), $correct, max(2, $optionsLimit - 1));
+            $options = collect(array_merge([$correct], $wrong))->unique()->take($optionsLimit)->shuffle()->values();
+
+            if ($options->count() < 2) {
+                return null;
+            }
+
             $translationText = !empty($item['translation']) ? (string) $item['translation'] : (string) $item['text'];
+            $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
+            $cefr = !empty($item['cefr']) ? strtoupper((string) $item['cefr']) : 'B2';
+            $contextLine = $this->readingContextLine($translationText, $topic);
 
             return [
                 'type' => 'mcq',
                 'itemId' => null,
-                'passage' => sprintf('%s%s',
-                    $translationText,
-                    !empty($item['topic']) ? ' · tema: ' . Str::lower((string) $item['topic']) : ''
-                ),
-                'question' => 'Selecciona la palabra correcta en el idioma de aprendizaje',
+                'passage' => "Exam style multiple-choice cloze ({$cefr}).\n\n{$contextLine}",
+                'question' => $question,
                 'options' => $options->all(),
                 'correct' => $options->search($correct),
             ];
-        })->filter(fn ($row) => count($row['options']) >= 2 && $row['correct'] !== false)->values()->all();
+        })->filter(fn ($row) => is_array($row) && count($row['options']) >= 2 && $row['correct'] !== false)->values()->all();
     }
 
-    private function buildWritingRuntimeItems(array $items): array
+    private function buildWritingRuntimeItems(array $items, string $difficultyLevel = 'B1'): array
     {
         return collect($items)
             ->shuffle()
             ->take(4)
-            ->map(fn ($item) => [
-                'type' => 'translate',
-                'itemId' => null,
-                'prompt' => 'Traduce al idioma objetivo',
-                'sentence' => (string) $item['translation'],
-                'answer' => (string) $item['text'],
-            ])
+            ->map(function ($item) use ($difficultyLevel) {
+                $translation = (string) ($item['translation'] ?? '');
+                $answer = (string) ($item['text'] ?? '');
+
+                if ($translation === '' || $answer === '') {
+                    return null;
+                }
+
+                $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
+                $prompt = match ($difficultyLevel) {
+                    'A1', 'A2' => 'Translate into clear everyday English.',
+                    'B1', 'B2' => 'Cambridge-style sentence transformation. Keep meaning and register.',
+                    default => 'Cambridge-style transformation. Preserve meaning, formal register, and lexical precision.',
+                };
+
+                return [
+                    'type' => 'translate',
+                    'itemId' => null,
+                    'prompt' => $prompt,
+                    'sentence' => sprintf('Rewrite in English (%s context): %s', $topic, $translation),
+                    'answer' => $answer,
+                ];
+            })
+            ->filter(fn ($item) => is_array($item))
             ->values()
             ->all();
     }
 
-    private function buildListeningRuntimeItems(array $items): array
+    private function buildListeningRuntimeItems(array $items, string $difficultyLevel = 'B1'): array
     {
         return collect($items)
             ->shuffle()
             ->take(3)
-            ->map(fn ($item) => [
-                'type' => 'fillin',
-                'itemId' => null,
-                'transcript' => sprintf('The word "%s" means "%s".', (string) $item['text'], (string) $item['translation']),
-                'question' => 'Completa la frase',
-                'sentence' => sprintf('"%s" in the target language is ________.', (string) $item['translation']),
-                'answer' => (string) $item['text'],
-            ])
+            ->map(function ($item) use ($difficultyLevel) {
+                $answer = (string) ($item['text'] ?? '');
+                $translation = (string) ($item['translation'] ?? '');
+
+                if ($answer === '' || $translation === '') {
+                    return null;
+                }
+
+                $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
+                $transcriptTemplate = match ($difficultyLevel) {
+                    'A1', 'A2' => 'You hear a short classroom instruction about %s. The speaker says: "Please %s before the final task."',
+                    'B1', 'B2' => 'You are listening to a short exam briefing about %s. The speaker says: "Candidates should %s before the final task because this reflects professional register and lexical precision."',
+                    default => 'You are listening to a high-level exam briefing about %s. The speaker states: "Candidates are expected to %s before the final task so that register, collocation and precision remain consistent throughout the response."',
+                };
+                $question = match ($difficultyLevel) {
+                    'A1', 'A2' => 'Write the missing word from the audio.',
+                    default => 'Complete the sentence with the exact word from the recording.',
+                };
+
+                return [
+                    'type' => 'fillin',
+                    'itemId' => null,
+                    'transcript' => sprintf($transcriptTemplate, Str::lower($topic), $answer),
+                    'question' => $question,
+                    'sentence' => sprintf('In the %s briefing, candidates should ________ before the final task (%s).', Str::lower($topic), $translation),
+                    'answer' => $answer,
+                ];
+            })
+            ->filter(fn ($item) => is_array($item))
             ->values()
             ->all();
     }
 
-    private function buildSpeakingRuntimeItems(array $items): array
+    private function buildSpeakingRuntimeItems(array $items, string $difficultyLevel = 'B1'): array
     {
         return collect($items)
             ->shuffle()
             ->take(5)
-            ->map(fn ($item) => [
-                'type' => 'pronounce',
-                'itemId' => null,
-                'word' => (string) $item['text'],
-                'hint' => !empty($item['translation']) ? (string) $item['translation'] : 'Pronuncia la palabra correctamente',
-            ])
+            ->map(function ($item) use ($difficultyLevel) {
+                $word = (string) ($item['text'] ?? '');
+
+                if ($word === '') {
+                    return null;
+                }
+
+                $translation = !empty($item['translation']) ? (string) $item['translation'] : null;
+                $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
+                $hint = match ($difficultyLevel) {
+                    'A1', 'A2' => sprintf('Say the word clearly and use it in one short sentence.%s', $translation ? ' Meaning: ' . $translation : ''),
+                    'B1', 'B2' => sprintf('Exam speaking (%s): pronounce clearly, stress key syllables, then use it in one formal sentence.%s', $topic, $translation ? ' Meaning: ' . $translation : ''),
+                    default => sprintf('Exam speaking (%s): produce clear stress and connected speech, then use the word in a precise C-level sentence.%s', $topic, $translation ? ' Meaning: ' . $translation : ''),
+                };
+
+                return [
+                    'type' => 'pronounce',
+                    'itemId' => null,
+                    'word' => $word,
+                    'hint' => $hint,
+                ];
+            })
             ->filter(fn ($item) => !empty($item['word']))
             ->values()
             ->all();
     }
 
-    private function buildMixRuntimeItems(array $items): array
+    private function buildMixRuntimeItems(array $items, string $difficultyLevel = 'B1'): array
     {
-        $reading = $this->buildReadingRuntimeItems($items);
-        $writing = $this->buildWritingRuntimeItems($items);
-        $speaking = $this->buildSpeakingRuntimeItems($items);
-        $listening = $this->buildListeningRuntimeItems($items);
-        $flashcards = $this->buildFlashcardRuntimeItems($items);
-        $matching = $this->buildMatchingRuntimeItems($items);
+        $matching = $this->buildMatchingRuntimeItems($items, $difficultyLevel);
+        $memory = $this->buildMemoryRuntimeItems($items, $difficultyLevel);
 
         return collect([
-            $reading[0] ?? null,
-            $listening[0] ?? null,
-            $speaking[0] ?? null,
-            $writing[0] ?? null,
-            $flashcards[0] ?? null,
             $matching[0] ?? null,
+            $memory[0] ?? null,
         ])->filter()->values()->all();
+    }
+
+    private function formatRuntimeTopic(?string $topic): string
+    {
+        if (! is_string($topic) || trim($topic) === '') {
+            return 'General English';
+        }
+
+        return Str::title(str_replace(['_', '-'], ' ', trim($topic)));
+    }
+
+    private function readingContextLine(string $translationText, string $topic): string
+    {
+        $frames = [
+            'Part 1 task. Complete the sentence with the most precise lexical choice.',
+            'Part 1 task. Select the option that best matches meaning and collocation.',
+            'Part 1 task. Choose the word that keeps the register natural and professional.',
+            'Part 1 task. Pick the word that fits both grammar and tone.',
+        ];
+
+        $frame = $frames[array_rand($frames)];
+
+        return sprintf('%s Context: %s. Intended meaning: "%s". Gap: The candidate must ________ this idea in accurate exam English.', $frame, $topic, $translationText);
+    }
+
+    private function selectReadingDistractors(array $sourceWords, string $correctWord, int $limit): array
+    {
+        $correct = trim($correctWord);
+
+        if ($correct === '') {
+            return [];
+        }
+
+        $ranked = collect($sourceWords)
+            ->filter(fn ($candidate) => is_string($candidate) && trim($candidate) !== '')
+            ->map(fn ($candidate) => trim((string) $candidate))
+            ->reject(fn ($candidate) => mb_strtolower($candidate) === mb_strtolower($correct))
+            ->unique()
+            ->map(function ($candidate) use ($correct) {
+                $sameInitial = mb_substr(mb_strtolower($candidate), 0, 1) === mb_substr(mb_strtolower($correct), 0, 1) ? 3 : 0;
+                $lengthDistance = abs(mb_strlen($candidate) - mb_strlen($correct));
+                $lengthScore = max(0, 3 - $lengthDistance);
+                $levenshteinDistance = levenshtein(mb_strtolower($correct), mb_strtolower($candidate));
+                $editScore = max(0, 8 - $levenshteinDistance);
+
+                return [
+                    'word' => $candidate,
+                    'score' => $sameInitial + $lengthScore + $editScore,
+                ];
+            })
+            ->sortByDesc('score')
+            ->pluck('word')
+            ->take($limit)
+            ->values()
+            ->all();
+
+        return $ranked;
+    }
+
+    private function resolveDifficultyLevel(?string $requestedLevel, array $sourceItems): string
+    {
+        $requested = strtoupper(trim((string) ($requestedLevel ?? '')));
+
+        if (in_array($requested, ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'], true)) {
+            return $requested;
+        }
+
+        $fromItems = collect($sourceItems)
+            ->pluck('cefr')
+            ->filter(fn ($level) => is_string($level) && trim($level) !== '')
+            ->map(fn ($level) => strtoupper(trim((string) $level)))
+            ->filter(fn ($level) => in_array($level, ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'], true));
+
+        if ($fromItems->isNotEmpty()) {
+            return (string) $fromItems->countBy()->sortDesc()->keys()->first();
+        }
+
+        return 'B1';
+    }
+
+    private function randomOrderExpression(): string
+    {
+        $driver = (string) DB::connection()->getDriverName();
+
+        return match ($driver) {
+            'pgsql', 'sqlite' => 'RANDOM()',
+            default => 'RAND()',
+        };
+    }
+
+    private function recentWordsCacheKey(int $userId, string $mode, string $sourceType, ?string $sourceId): string
+    {
+        $scope = trim((string) ($sourceId ?? 'library'));
+
+        return sprintf('lexi:exercise:recent:%d:%s:%s:%s', $userId, $mode, $sourceType, $scope);
+    }
+
+    private function shuffleAvoidingRecentWords(int $userId, string $mode, string $sourceType, ?string $sourceId, array $items): array
+    {
+        if ($items === []) {
+            return [];
+        }
+
+        $cacheKey = $this->recentWordsCacheKey($userId, $mode, $sourceType, $sourceId);
+        $recent = collect(Cache::get($cacheKey, []))
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => mb_strtolower(trim((string) $word)))
+            ->unique()
+            ->values();
+
+        if ($recent->isEmpty()) {
+            return collect($items)->shuffle()->values()->all();
+        }
+
+        $fresh = collect($items)
+            ->filter(fn ($item) => ! $recent->contains(mb_strtolower((string) ($item['text'] ?? ''))));
+        $repeated = collect($items)
+            ->filter(fn ($item) => $recent->contains(mb_strtolower((string) ($item['text'] ?? ''))));
+
+        return $fresh
+            ->shuffle()
+            ->concat($repeated->shuffle())
+            ->values()
+            ->all();
+    }
+
+    private function rememberRecentlyUsedWords(int $userId, string $mode, string $sourceType, ?string $sourceId, array $items): void
+    {
+        if ($items === []) {
+            return;
+        }
+
+        $usedWords = collect($items)
+            ->flatMap(function ($item) {
+                if (! is_array($item)) {
+                    return [];
+                }
+
+                $type = (string) ($item['type'] ?? '');
+
+                return match ($type) {
+                    'mcq' => is_array($item['options'] ?? null) ? array_values($item['options']) : [],
+                    'fillin', 'translate' => [$item['answer'] ?? null],
+                    'pronounce' => [$item['word'] ?? null],
+                    'flashcard' => [$item['front'] ?? null],
+                    'match' => collect($item['pairs'] ?? [])->pluck('left')->values()->all(),
+                    'memory' => collect($item['pairs'] ?? [])->pluck('front')->values()->all(),
+                    default => [],
+                };
+            })
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => mb_strtolower(trim((string) $word)))
+            ->unique()
+            ->values();
+
+        if ($usedWords->isEmpty()) {
+            return;
+        }
+
+        $cacheKey = $this->recentWordsCacheKey($userId, $mode, $sourceType, $sourceId);
+        $previous = collect(Cache::get($cacheKey, []))
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => mb_strtolower(trim((string) $word)))
+            ->values();
+
+        $updated = $previous
+            ->concat($usedWords)
+            ->unique()
+            ->take(-80)
+            ->values()
+            ->all();
+
+        Cache::put($cacheKey, $updated, now()->addHours(12));
+    }
+
+    private function restrictSourceItemsToSingleLanguage(array $items, ?string $requestedLanguage): array
+    {
+        if ($items === []) {
+            return [];
+        }
+
+        $normalizedRequested = is_string($requestedLanguage) ? trim($requestedLanguage) : '';
+
+        if ($normalizedRequested !== '') {
+            return array_values(array_filter($items, function ($item) use ($normalizedRequested) {
+                return isset($item['language']) && (string) $item['language'] === $normalizedRequested;
+            }));
+        }
+
+        $dominantLanguage = collect($items)
+            ->pluck('language')
+            ->filter(fn ($value) => is_string($value) && trim($value) !== '')
+            ->map(fn ($value) => trim((string) $value))
+            ->countBy()
+            ->sortDesc()
+            ->keys()
+            ->first();
+
+        if (! is_string($dominantLanguage) || $dominantLanguage === '') {
+            return $items;
+        }
+
+        return array_values(array_filter($items, function ($item) use ($dominantLanguage) {
+            return isset($item['language']) && (string) $item['language'] === $dominantLanguage;
+        }));
     }
 
     private function logAiGeneration(Request $request, array $validated, array $aiResult, string $status): void

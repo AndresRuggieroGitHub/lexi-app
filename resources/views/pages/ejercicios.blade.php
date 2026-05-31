@@ -56,7 +56,7 @@
       </article>
       <article class="exercise-card" data-mode="mix" role="button" tabindex="0" aria-label="{{ __('lexi.exercises.card_mix_aria') }}" style="--card-color:#f9b233">
         <div class="exercise-card-icon"><i class="bi bi-shuffle"></i></div>
-        <img src="images/mix_small.webp" srcset="images/mix_small.webp 300w, images/mix_medium.webp 600w, images/mix_large.webp 900w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 20vw" loading="lazy" alt="{{ __('lexi.exercises.mix_image_alt') }}">
+        <img src="images/challenge_small.webp" srcset="images/challenge_small.webp 300w, images/challenge_medium.webp 600w, images/challenge_large.webp 900w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 20vw" loading="lazy" alt="{{ __('lexi.exercises.mix_image_alt') }}">
         <p class="exercise-card-label">{{ __('lexi.exercises.mix_label') }}</p>
         <span class="exercise-card-badge">{{ __('lexi.exercises.mix_label') }}</span>
       </article>
@@ -260,8 +260,10 @@
     return SHARED_TOPIC_OPTIONS;
   }
 
-  async function loadVocabularySources(message = t('loading_options')) {
-    setExerciseCollectionsLoading(true, message);
+  async function loadVocabularySources(message = t('loading_options'), showSpinner = false) {
+    if (showSpinner) {
+      setExerciseCollectionsLoading(true, message);
+    }
 
     try {
       const response = await exerciseApiFetch('/api/library/state');
@@ -283,7 +285,9 @@
         catalog: [],
       };
     } finally {
-      setExerciseCollectionsLoading(false);
+      if (showSpinner) {
+        setExerciseCollectionsLoading(false);
+      }
     }
   }
 
@@ -413,7 +417,7 @@
         localStorage.setItem(EXERCISE_CATALOG_TOPIC_KEY, '');
         localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
         try {
-          await loadVocabularySources(button.dataset.sourceTab === 'saved' ? t('loading_saved_lists') : t('loading_catalog'));
+          await loadVocabularySources(button.dataset.sourceTab === 'saved' ? t('loading_saved_lists') : t('loading_catalog'), true);
           syncSourcePanels();
           setupExerciseCatalogSelects();
           setupExerciseCollectionSelect();
@@ -484,74 +488,109 @@
     localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
   }
 
-  function buildCustomSpeakingItems(items) {
+  function resolveDifficultyLevel(source, items) {
+    const selectedLevel = String(source?.selectedLevel || '').toUpperCase();
+    if (['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(selectedLevel)) {
+      return selectedLevel;
+    }
+
+    const counts = new Map();
+    items.forEach(item => {
+      const level = String(item?.cefr || '').toUpperCase();
+      if (!['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(level)) return;
+      counts.set(level, (counts.get(level) || 0) + 1);
+    });
+
+    if (!counts.size) return 'B1';
+
+    return Array.from(counts.entries()).sort((left, right) => right[1] - left[1])[0][0];
+  }
+
+  function buildCustomSpeakingItems(items, difficultyLevel = 'B1') {
     return items
       .map(item => ({
         type: 'pronounce',
         word: item.text || item.word || '',
-        hint: item.translation || item.meaning || '',
+        hint: buildSpeakingHint(item, difficultyLevel),
       }))
       .filter(item => item.word)
       .slice(0, 5);
   }
 
-  function buildCustomReadingItems(items) {
+  function buildCustomReadingItems(items, difficultyLevel = 'B1') {
+    const wordBank = items
+      .map(item => item.text || item.word || '')
+      .filter(Boolean);
+    const optionsLimit = ['A1', 'A2'].includes(difficultyLevel) ? 3 : 4;
+    const question = ['A1', 'A2'].includes(difficultyLevel)
+      ? 'Choose the correct word to complete the sentence.'
+      : ['B1', 'B2'].includes(difficultyLevel)
+        ? 'Choose the best word to complete the gap naturally and accurately.'
+        : 'Choose the most precise option to complete the gap while preserving register and collocation.';
+
     return items
       .filter(item => item.text && item.translation)
       .slice(0, 5)
       .map(item => {
-        const correctAnswer = item.translation;
-        const options = shuffleArray([
-          correctAnswer,
-          `not ${correctAnswer}`,
-          item.topic ? `related to ${item.topic}` : 'an unrelated idea',
-          item.cefr ? `level ${item.cefr}` : 'a grammar rule',
-        ]);
+        const correctAnswer = item.text;
+        const distractors = selectReadingDistractors(wordBank, correctAnswer, Math.max(2, optionsLimit - 1));
+        const options = shuffleArray([correctAnswer, ...distractors]).slice(0, optionsLimit);
+        const topic = formatTopicLabel(item.topic);
 
         return {
           type: 'mcq',
-          passage: `${item.text} means ${correctAnswer} in Spanish.${item.topic ? ' It belongs to the topic of ' + item.topic + '.' : ''}`,
-          question: `What is the best translation of "${item.text}"?`,
+          passage: `Exam-style multiple-choice cloze (${item.cefr || 'B2'}).\n\nPart 1 task. Context: ${topic}. Intended meaning: "${item.translation}". Gap: The candidate must ________ this idea in accurate formal English.`,
+          question,
           options,
           correct: options.indexOf(correctAnswer),
         };
       });
   }
 
-  function buildCustomWritingItems(items) {
+  function buildCustomWritingItems(items, difficultyLevel = 'B1') {
+    const prompt = ['A1', 'A2'].includes(difficultyLevel)
+      ? 'Translate into clear everyday English.'
+      : ['B1', 'B2'].includes(difficultyLevel)
+        ? 'Cambridge-style sentence transformation. Keep meaning and register.'
+        : 'Cambridge-style transformation. Preserve meaning, formal register, and lexical precision.';
+
     return items
       .map(item => ({
         type: 'translate',
-        prompt: t('js.exercise_runtime.translate_to_spanish'),
-        sentence: item.text || item.word || '',
-        answer: item.translation || item.meaning || '',
+        prompt,
+        sentence: `Rewrite in English (${formatTopicLabel(item.topic)} context): ${item.translation || item.meaning || ''}`,
+        answer: item.text || item.word || '',
       }))
       .filter(item => item.sentence && item.answer)
-      .slice(0, 3);
+      .slice(0, 4);
   }
 
-  function buildCustomListeningItems(items) {
+  function buildCustomListeningItems(items, difficultyLevel = 'B1') {
+    const question = ['A1', 'A2'].includes(difficultyLevel)
+      ? 'Write the missing word from the audio.'
+      : 'Complete the sentence with the exact word from the recording.';
+
     return items
       .filter(item => item.text && item.translation)
       .slice(0, 3)
       .map(item => ({
         type: 'fillin',
-        transcript: `${item.text} means ${item.translation}. Listen carefully and identify the missing word.`,
-        question: t('complete_sentence'),
-        sentence: `${item.translation} in English is ________.`,
+        transcript: ['C1', 'C2'].includes(difficultyLevel)
+          ? `You are listening to a high-level exam briefing about ${String(formatTopicLabel(item.topic)).toLowerCase()}. The speaker states: "Candidates are expected to ${item.text} before the final task so that register, collocation and precision remain consistent throughout the response."`
+          : ['A1', 'A2'].includes(difficultyLevel)
+            ? `You hear a short classroom instruction about ${String(formatTopicLabel(item.topic)).toLowerCase()}. The speaker says: "Please ${item.text} before the final task."`
+            : `You are listening to a short exam briefing about ${String(formatTopicLabel(item.topic)).toLowerCase()}. The speaker says: "Candidates should ${item.text} before the final task because this reflects professional register and lexical precision."`,
+        question,
+        sentence: `In the ${String(formatTopicLabel(item.topic)).toLowerCase()} briefing, candidates should ________ before the final task (${item.translation}).`,
         answer: item.text,
       }));
   }
 
-  function buildCustomMixItems(items) {
-    const readingItems = buildCustomReadingItems(items).slice(0, 1);
-    const listeningItems = buildCustomListeningItems(items).slice(0, 1);
-    const speakingItems = buildCustomSpeakingItems(items).slice(0, 1);
-    const writingItems = buildCustomWritingItems(items).slice(0, 1);
-    const flashcardItems = buildCustomFlashcardItems(items).slice(0, 1);
-    const matchingItems = buildCustomMatchingItems(items).slice(0, 1);
+  function buildCustomMixItems(items, difficultyLevel = 'B1') {
+    const matchingItems = buildCustomMatchingItems(items, difficultyLevel).slice(0, 1);
+    const memoryItems = buildCustomMemoryItems(items, difficultyLevel).slice(0, 1);
 
-    return [...readingItems, ...listeningItems, ...speakingItems, ...writingItems, ...flashcardItems, ...matchingItems].filter(item => item && item.type);
+    return [...matchingItems, ...memoryItems].filter(item => item && item.type);
   }
 
   function buildCustomFlashcardItems(items) {
@@ -567,7 +606,7 @@
       }));
   }
 
-  function buildCustomMatchingItems(items) {
+  function buildCustomMatchingItems(items, difficultyLevel = 'B1') {
     const pairs = items
       .filter(item => item.text && item.translation)
       .slice(0, 12)
@@ -575,10 +614,32 @@
 
     if (pairs.length < 3) return [];
 
+    const timePerPair = ['A1', 'A2'].includes(difficultyLevel) ? 8 : difficultyLevel === 'B1' ? 7 : difficultyLevel === 'B2' ? 6 : 5;
+
     return [{
       type: 'match',
-      question: tx('matching_question', 'Conecta cada palabra con su traduccion correcta'),
+      question: tx('matching_question', 'Match the pairs as fast as possible. Faster time means better score.'),
       pairs,
+      time_limit_seconds: Math.max(35, Math.min(95, pairs.length * timePerPair)),
+    }];
+  }
+
+  function buildCustomMemoryItems(items, difficultyLevel = 'B1') {
+    const pairs = items
+      .filter(item => item.text && item.translation)
+      .slice(0, 18)
+      .map(item => ({ front: item.text, back: item.translation }));
+
+    if (pairs.length < 4) return [];
+
+    const previewMs = ['A1', 'A2'].includes(difficultyLevel) ? 1500 : difficultyLevel === 'B1' ? 1200 : difficultyLevel === 'B2' ? 900 : 700;
+
+    return [{
+      type: 'memory',
+      question: tx('memory_question', 'Memory Matrix: find all translation pairs with the fewest moves.'),
+      pairs,
+      grid_columns: pairs.length >= 12 ? 6 : 4,
+      preview_ms: previewMs,
     }];
   }
 
@@ -589,6 +650,76 @@
       [clone[index], clone[randomIndex]] = [clone[randomIndex], clone[index]];
     }
     return clone;
+  }
+
+  function selectReadingDistractors(wordBank, correctWord, limit) {
+    const correct = String(correctWord || '').trim().toLowerCase();
+    if (!correct) return [];
+
+    return Array.from(new Set(
+      (wordBank || [])
+        .map(word => String(word || '').trim())
+        .filter(Boolean)
+        .filter(word => word.toLowerCase() !== correct)
+    ))
+      .map(word => {
+        const lower = word.toLowerCase();
+        const sameInitial = lower[0] === correct[0] ? 3 : 0;
+        const lengthDistance = Math.abs(lower.length - correct.length);
+        const lengthScore = Math.max(0, 3 - lengthDistance);
+        const editScore = Math.max(0, 8 - levenshteinDistance(correct, lower));
+        return { word, score: sameInitial + lengthScore + editScore };
+      })
+      .sort((left, right) => right.score - left.score)
+      .slice(0, limit)
+      .map(item => item.word);
+  }
+
+  function levenshteinDistance(a, b) {
+    const rows = a.length + 1;
+    const cols = b.length + 1;
+    const matrix = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+    for (let row = 0; row < rows; row += 1) matrix[row][0] = row;
+    for (let col = 0; col < cols; col += 1) matrix[0][col] = col;
+
+    for (let row = 1; row < rows; row += 1) {
+      for (let col = 1; col < cols; col += 1) {
+        const cost = a[row - 1] === b[col - 1] ? 0 : 1;
+        matrix[row][col] = Math.min(
+          matrix[row - 1][col] + 1,
+          matrix[row][col - 1] + 1,
+          matrix[row - 1][col - 1] + cost
+        );
+      }
+    }
+
+    return matrix[rows - 1][cols - 1];
+  }
+
+  function formatTopicLabel(topic) {
+    const value = String(topic || '').trim();
+    if (!value) return 'General English';
+
+    return value
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\b\w/g, char => char.toUpperCase());
+  }
+
+  function buildSpeakingHint(item, difficultyLevel = 'B1') {
+    const topic = formatTopicLabel(item.topic);
+    const meaning = item.translation || item.meaning || '';
+
+    if (['A1', 'A2'].includes(difficultyLevel)) {
+      return `Say the word clearly and use it in one short sentence.${meaning ? ' Meaning: ' + meaning : ''}`;
+    }
+
+    if (['C1', 'C2'].includes(difficultyLevel)) {
+      return `Exam speaking (${topic}): produce clear stress and connected speech, then use the word in a precise C-level sentence.${meaning ? ' Meaning: ' + meaning : ''}`;
+    }
+
+    return `Exam speaking (${topic}): pronounce clearly, stress key syllables, then use it in one formal sentence.${meaning ? ' Meaning: ' + meaning : ''}`;
   }
 
   function normalizeTemplateExerciseItem(templateType, item, templateTitle) {
@@ -654,6 +785,7 @@
     const items = selectedTemplate.items
       .map(item => normalizeTemplateExerciseItem(mode, item, selectedTemplate.title || 'Plantilla personalizada'))
       .filter(item => {
+        if (mode === 'mix') return ['match', 'memory'].includes(item.type);
         if (item.type === 'mcq') return Array.isArray(item.options) && item.options.length >= 2;
         if (item.type === 'pronounce') return Boolean(item.word);
         return Boolean(item.answer || item.sentence || item.question);
@@ -671,6 +803,7 @@
     const base = EXERCISES[mode];
     const source = getSelectedVocabularySource();
     const templateModeData = getTemplateModeData(mode);
+    const difficultyLevel = resolveDifficultyLevel(source, source.items || []);
 
     if (templateModeData) {
       return templateModeData;
@@ -681,35 +814,35 @@
     }
 
     if (mode === 'reading') {
-      const customItems = buildCustomReadingItems(source.items);
+      const customItems = buildCustomReadingItems(source.items, difficultyLevel);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
     }
 
     if (mode === 'speaking') {
-      const customItems = buildCustomSpeakingItems(source.items);
+      const customItems = buildCustomSpeakingItems(source.items, difficultyLevel);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
     }
 
     if (mode === 'listening') {
-      const customItems = buildCustomListeningItems(source.items);
+      const customItems = buildCustomListeningItems(source.items, difficultyLevel);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
     }
 
     if (mode === 'writing') {
-      const customItems = buildCustomWritingItems(source.items);
+      const customItems = buildCustomWritingItems(source.items, difficultyLevel);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
     }
 
     if (mode === 'mix') {
-      const customItems = buildCustomMixItems(source.items);
+      const customItems = buildCustomMixItems(source.items, difficultyLevel);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
@@ -723,7 +856,7 @@
     }
 
     if (mode === 'matching') {
-      const customItems = buildCustomMatchingItems(source.items);
+      const customItems = buildCustomMatchingItems(source.items, difficultyLevel);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
@@ -882,25 +1015,33 @@
       title: tx('challenge_label', 'Desafio'),
       items: [
         {
-          type: "mcq",
-          passage: "Remote work has become increasingly common since 2020. Many employees report higher productivity when working from home, while others miss the social aspects of the office. Companies are now exploring hybrid models that combine both approaches.",
-          question: "What are companies exploring as a solution?",
-          options: ["Full remote work", "Full office work", "Hybrid models", "Four-day work weeks"],
-          correct: 2
+          type: 'match',
+          question: 'Match the pairs as fast as possible. Faster time means better score.',
+          time_limit_seconds: 60,
+          pairs: [
+            { left: 'deadline', right: 'plazo de entrega' },
+            { left: 'meeting', right: 'reunion' },
+            { left: 'feedback', right: 'retroalimentacion' },
+            { left: 'evidence', right: 'evidencia' },
+            { left: 'improve', right: 'mejorar' },
+            { left: 'schedule', right: 'programar' },
+          ]
         },
         {
-          type: "fillin",
-          transcript: "To apply for the position, please send your CV and a cover letter to the address shown on screen. The application deadline is the thirty-first of May. Late applications will not be considered.",
-          question: t('complete_sentence'),
-          sentence: "Please send your CV and a ________ letter to the address shown.",
-          answer: "cover"
-        },
-        { type: "pronounce", word: "get the ball rolling", hint: "poner las cosas en marcha" },
-        {
-          type: "translate",
-          prompt: t('translate_to_english'),
-          sentence: "Lleva dos horas esperando una respuesta.",
-          answer: "He has been waiting for an answer for two hours."
+          type: 'memory',
+          question: 'Memory Matrix: find all translation pairs with the fewest moves.',
+          grid_columns: 4,
+          preview_ms: 900,
+          pairs: [
+            { front: 'deadline', back: 'plazo de entrega' },
+            { front: 'meeting', back: 'reunion' },
+            { front: 'feedback', back: 'retroalimentacion' },
+            { front: 'evidence', back: 'evidencia' },
+            { front: 'improve', back: 'mejorar' },
+            { front: 'schedule', back: 'programar' },
+            { front: 'target', back: 'objetivo' },
+            { front: 'review', back: 'repasar' },
+          ]
         }
       ]
     }
@@ -914,6 +1055,21 @@
   let sessionAnswerRecords = [];
   let currentModeData = null;
   let runtimeRequestToken = 0;
+
+  function renderExerciseLoading(title) {
+    const content = document.getElementById('exerciseContent');
+    document.getElementById('exPanelTitle').textContent = title;
+    document.getElementById('exProgress').textContent = tx('loading_short', 'Cargando...');
+    document.getElementById('exProgressBar').style.width = '12%';
+    document.getElementById('btnPrevEx').disabled = true;
+    document.getElementById('btnNextEx').disabled = true;
+    document.getElementById('btnNextEx').innerHTML = tx('loading_short', 'Cargando...');
+    content.innerHTML =
+      '<div class="ex-loading-state" role="status" aria-live="polite">' +
+      '<span class="ex-loading-spinner" aria-hidden="true"></span>' +
+      '<span class="ex-loading-text">' + tx('loading_exercise', 'Preparando ejercicios...') + '</span>' +
+      '</div>';
+  }
 
   function resetExerciseSessionMetrics() {
     sessionStartedAt = Date.now();
@@ -1016,14 +1172,13 @@
     currentMode = mode;
     currentIndex = 0;
     resetExerciseSessionMetrics();
-    currentModeData = getModeData(mode);
+    currentModeData = null;
+    const fallbackModeData = getModeData(mode);
 
-    const modeData = currentModeData;
     document.getElementById('exerciseMenu').hidden = true;
     document.getElementById('exercisePanel').hidden = false;
     document.getElementById('exCompleteModal').hidden = true;
-    document.getElementById('exPanelTitle').textContent = modeData.title;
-    renderExercise();
+    renderExerciseLoading(fallbackModeData.title);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     const token = ++runtimeRequestToken;
@@ -1037,10 +1192,20 @@
 
       if (runtimeData && Array.isArray(runtimeData.items) && runtimeData.items.length) {
         currentModeData = runtimeData;
-        currentIndex = 0;
-        renderExercise();
+      } else {
+        currentModeData = fallbackModeData;
       }
     } catch {
+      if (token !== runtimeRequestToken || currentMode !== mode) {
+        return;
+      }
+      currentModeData = fallbackModeData;
+    }
+
+    if (token === runtimeRequestToken && currentMode === mode) {
+      currentIndex = 0;
+      document.getElementById('btnNextEx').disabled = false;
+      renderExercise();
     }
   }
 
@@ -1073,6 +1238,7 @@
     else if (item.type === 'translate') renderTranslate(content, item);
     else if (item.type === 'flashcard') renderFlashcard(content, item);
     else if (item.type === 'match') renderMatching(content, item);
+    else if (item.type === 'memory') renderMemory(content, item);
   }
 
   function nextExercise() {
@@ -1377,16 +1543,26 @@
     const leftItems = shuffleArray(pairs.map(pair => pair.left));
     const rightItems = shuffleArray(pairs.map(pair => pair.right));
     const expected = new Map(pairs.map(pair => [pair.left, pair.right]));
+    const totalPairs = pairs.length;
+    const timeLimitSeconds = Math.max(25, Math.min(120, Number(item.time_limit_seconds) || 60));
+    const startedAt = Date.now();
+    const deadlineAt = startedAt + (timeLimitSeconds * 1000);
     const matchedLeft = new Set();
     const matchedRight = new Set();
     const connections = [];
     let selectedLeft = null;
     let selectedRight = null;
     let mistakes = 0;
+    let gameFinished = false;
+    let timerId = null;
 
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-bezier2"></i> ' + tx('matching_label', 'Conectar columnas') + '</p>' +
       '<p class="ex-question">' + (item.question || tx('matching_question', 'Conecta cada palabra con su traduccion correcta')) + '</p>' +
+      '<div class="ex-game-meta">' +
+        '<span class="ex-game-chip"><i class="bi bi-stopwatch"></i> <strong class="ex-match-timer">' + timeLimitSeconds + 's</strong></span>' +
+        '<span class="ex-game-chip"><i class="bi bi-lightning-charge"></i> ' + tx('matching_pairs', 'Pairs') + ': <strong class="ex-match-count">0/' + totalPairs + '</strong></span>' +
+      '</div>' +
       '<div class="ex-matching-board">' +
         '<div class="ex-matching-column" data-column="left"></div>' +
         '<div class="ex-matching-column" data-column="right"></div>' +
@@ -1398,8 +1574,78 @@
     const rightColumn = container.querySelector('[data-column="right"]');
     const connectionList = container.querySelector('.ex-matching-connections');
     const feedback = container.querySelector('.ex-feedback');
+    const timerEl = container.querySelector('.ex-match-timer');
+    const countEl = container.querySelector('.ex-match-count');
+
+    const stopTimer = () => {
+      if (timerId !== null) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+    };
+
+    const disableBoard = () => {
+      leftColumn.querySelectorAll('.ex-match-btn').forEach(button => {
+        button.disabled = true;
+      });
+      rightColumn.querySelectorAll('.ex-match-btn').forEach(button => {
+        button.disabled = true;
+      });
+    };
+
+    const finishGame = (success, timedOut = false) => {
+      if (gameFinished) return;
+      gameFinished = true;
+      stopTimer();
+
+      const elapsedSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+      const scoreBase = Math.max(0, totalPairs - mistakes);
+      const score = totalPairs > 0 ? Math.round((scoreBase / totalPairs) * 100) : 0;
+
+      disableBoard();
+
+      if (timedOut) {
+        feedback.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + tx('matching_timeout', 'Time is over. Try again to beat the clock.');
+        feedback.className = 'ex-feedback ex-feedback--warn';
+      } else if (success) {
+        feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + tx('matching_success', 'Great speed. Challenge completed.');
+        feedback.className = 'ex-feedback ex-feedback--ok';
+      }
+
+      feedback.hidden = false;
+      markExerciseItemResult(container, success, {
+        itemId: item.itemId,
+        itemType: item.type,
+        prompt: item.question,
+        expectedAnswer: JSON.stringify(pairs),
+        answerText: JSON.stringify(connections),
+        answerPayload: { mistakes, score, elapsed_seconds: elapsedSeconds, timed_out: timedOut },
+        pointsObtained: score / 100,
+        feedback: success ? tx('correct', 'Correcto!') : tx('incorrect', 'Incorrecto'),
+      });
+    };
+
+    const updateTimer = () => {
+      const remainingMs = deadlineAt - Date.now();
+      const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+      timerEl.textContent = remainingSeconds + 's';
+
+      if (remainingSeconds <= 8) {
+        timerEl.classList.add('is-warning');
+      } else {
+        timerEl.classList.remove('is-warning');
+      }
+
+      if (remainingMs <= 0) {
+        finishGame(false, true);
+      }
+    };
 
     const refreshConnectionList = () => {
+      if (countEl) {
+        countEl.textContent = connections.length + '/' + totalPairs;
+      }
+
       if (!connections.length) {
         connectionList.innerHTML = '<span class="ex-matching-placeholder">' + tx('matching_pending', 'Conexiones pendientes...') + '</span>';
         return;
@@ -1427,6 +1673,7 @@
     };
 
     const evaluateSelection = () => {
+      if (gameFinished) return;
       if (!selectedLeft || !selectedRight) return;
 
       const isCorrectMatch = expected.get(selectedLeft) === selectedRight;
@@ -1451,18 +1698,7 @@
       refreshConnectionList();
 
       if (matchedLeft.size === pairs.length) {
-        const score = Math.max(0, Math.round(((pairs.length - mistakes) / pairs.length) * 100));
-        const success = score >= 70;
-        markExerciseItemResult(container, success, {
-          itemId: item.itemId,
-          itemType: item.type,
-          prompt: item.question,
-          expectedAnswer: JSON.stringify(pairs),
-          answerText: JSON.stringify(connections),
-          answerPayload: { mistakes, score },
-          pointsObtained: score / 100,
-          feedback: success ? tx('correct', 'Correcto!') : tx('incorrect', 'Incorrecto'),
-        });
+        finishGame(true, false);
       }
     };
 
@@ -1501,6 +1737,155 @@
     });
 
     refreshConnectionList();
+    updateTimer();
+    timerId = window.setInterval(updateTimer, 250);
+  }
+
+  function renderMemory(container, item) {
+    const sourcePairs = Array.isArray(item.pairs) ? item.pairs : [];
+    const previewMs = Math.max(500, Math.min(2200, Number(item.preview_ms) || 900));
+    const columns = [4, 6].includes(Number(item.grid_columns)) ? Number(item.grid_columns) : (sourcePairs.length >= 12 ? 6 : 4);
+
+    const pairs = sourcePairs
+      .filter(pair => pair && pair.front && pair.back)
+      .slice(0, columns === 6 ? 18 : 8);
+
+    const cards = shuffleArray(pairs.flatMap((pair, index) => ([
+      { id: 'f-' + index, pairId: index, text: pair.front },
+      { id: 'b-' + index, pairId: index, text: pair.back },
+    ])));
+
+    let selectedCardId = null;
+    let lockBoard = false;
+    let moves = 0;
+    const matchedPairs = new Set();
+    const startedAt = Date.now();
+
+    container.innerHTML =
+      '<p class="ex-type-label"><i class="bi bi-grid-3x3-gap"></i> ' + tx('memory_label', 'Memory Matrix') + '</p>' +
+      '<p class="ex-question">' + (item.question || tx('memory_question', 'Find all translation pairs with the fewest moves.')) + '</p>' +
+      '<div class="ex-game-meta">' +
+        '<span class="ex-game-chip"><i class="bi bi-arrows-move"></i> ' + tx('moves_label', 'Moves') + ': <strong class="ex-memory-moves">0</strong></span>' +
+        '<span class="ex-game-chip"><i class="bi bi-patch-check"></i> ' + tx('pairs_label', 'Pairs') + ': <strong class="ex-memory-count">0/' + pairs.length + '</strong></span>' +
+      '</div>' +
+      '<div class="ex-memory-board" style="--memory-cols:' + columns + '"></div>' +
+      '<div class="ex-feedback" hidden></div>';
+
+    const board = container.querySelector('.ex-memory-board');
+    const feedback = container.querySelector('.ex-feedback');
+    const movesEl = container.querySelector('.ex-memory-moves');
+    const countEl = container.querySelector('.ex-memory-count');
+
+    const cardState = new Map(cards.map(card => [card.id, { ...card, revealed: false, matched: false }]));
+
+    const renderCards = () => {
+      board.innerHTML = cards.map(card => {
+        const state = cardState.get(card.id);
+        const classes = ['ex-memory-card'];
+        if (state.matched) classes.push('is-matched');
+        if (state.revealed) classes.push('is-revealed');
+        return '<button type="button" class="' + classes.join(' ') + '" data-card-id="' + card.id + '"><span class="ex-memory-face ex-memory-face--front">?</span><span class="ex-memory-face ex-memory-face--back">' + state.text + '</span></button>';
+      }).join('');
+
+      board.querySelectorAll('[data-card-id]').forEach(button => {
+        button.addEventListener('click', () => handleCardClick(button.dataset.cardId));
+      });
+    };
+
+    const syncMeta = () => {
+      movesEl.textContent = String(moves);
+      countEl.textContent = matchedPairs.size + '/' + pairs.length;
+    };
+
+    const setCardRevealed = (cardId, revealed) => {
+      const state = cardState.get(cardId);
+      if (!state || state.matched) return;
+      state.revealed = revealed;
+      renderCards();
+    };
+
+    const finishMemory = () => {
+      const elapsedSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      const score = Math.max(0, Math.round(100 - ((moves - pairs.length) * 6)));
+      const success = matchedPairs.size === pairs.length;
+
+      feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + tx('memory_success', 'All pairs completed. Great focus.');
+      feedback.className = 'ex-feedback ex-feedback--ok';
+      feedback.hidden = false;
+
+      markExerciseItemResult(container, success, {
+        itemId: item.itemId,
+        itemType: item.type,
+        prompt: item.question,
+        expectedAnswer: JSON.stringify(pairs),
+        answerText: JSON.stringify(Array.from(matchedPairs)),
+        answerPayload: { moves, elapsed_seconds: elapsedSeconds, score },
+        pointsObtained: score / 100,
+        feedback: tx('correct', 'Correcto!'),
+      });
+    };
+
+    const handleCardClick = (cardId) => {
+      if (lockBoard) return;
+
+      const state = cardState.get(cardId);
+      if (!state || state.matched || state.revealed) return;
+
+      setCardRevealed(cardId, true);
+
+      if (!selectedCardId) {
+        selectedCardId = cardId;
+        window.setTimeout(() => {
+          const selectedState = selectedCardId ? cardState.get(selectedCardId) : null;
+          if (selectedState && !selectedState.matched && selectedState.revealed) {
+            selectedState.revealed = false;
+            selectedCardId = null;
+            renderCards();
+          }
+        }, previewMs);
+        return;
+      }
+
+      if (selectedCardId === cardId) {
+        return;
+      }
+
+      moves += 1;
+      syncMeta();
+
+      const firstId = selectedCardId;
+      const first = cardState.get(firstId);
+      const second = cardState.get(cardId);
+      selectedCardId = null;
+
+      if (!first || !second) return;
+
+      if (first.pairId === second.pairId) {
+        first.matched = true;
+        second.matched = true;
+        first.revealed = true;
+        second.revealed = true;
+        matchedPairs.add(first.pairId);
+        renderCards();
+        syncMeta();
+
+        if (matchedPairs.size === pairs.length) {
+          finishMemory();
+        }
+        return;
+      }
+
+      lockBoard = true;
+      window.setTimeout(() => {
+        first.revealed = false;
+        second.revealed = false;
+        lockBoard = false;
+        renderCards();
+      }, Math.max(450, previewMs - 200));
+    };
+
+    renderCards();
+    syncMeta();
   }
 
   function showCompletion() {

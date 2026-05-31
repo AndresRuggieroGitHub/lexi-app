@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Http;
 
 class AiExerciseGenerator
 {
-    public function generate(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage): ?array
+    public function generate(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage, ?string $targetCefrLevel = null): ?array
     {
         $apiKey = (string) config('services.openai.api_key');
 
@@ -16,7 +16,7 @@ class AiExerciseGenerator
 
         $model = (string) config('services.openai.model', 'gpt-4o-mini');
         $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
-        $prompt = $this->buildPrompt($mode, $sourceItems, $sourceType, $learningLanguage, $nativeLanguage);
+        $prompt = $this->buildPrompt($mode, $sourceItems, $sourceType, $learningLanguage, $nativeLanguage, $targetCefrLevel);
         $request = Http::timeout(15)->withToken($apiKey);
 
         if (str_contains(strtolower($baseUrl), 'openrouter.ai')) {
@@ -77,7 +77,7 @@ class AiExerciseGenerator
         ];
     }
 
-    private function buildPrompt(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage): string
+    private function buildPrompt(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage, ?string $targetCefrLevel): string
     {
         $sample = array_slice($sourceItems, 0, 24);
 
@@ -87,16 +87,18 @@ class AiExerciseGenerator
             'source_type' => $sourceType,
             'learning_language' => $learningLanguage,
             'native_language' => $nativeLanguage,
+            'target_cefr_level' => $targetCefrLevel,
             'rules' => [
                 'Use only words from source_items for options/answers in learning language.',
                 'Avoid mixing scripts/languages in options.',
+                'Adapt lexical and grammatical complexity to target_cefr_level when provided.',
                 'Return 3-5 items.',
                 'Output JSON with {title, items}.',
                 'Item shape for reading: {type:"mcq", passage, question, options:string[], correct:number}.',
                 'Item shape for writing: {type:"translate", prompt, sentence, answer}.',
                 'Item shape for listening: {type:"fillin", transcript, question, sentence, answer}.',
                 'Item shape for speaking: {type:"pronounce", word, hint}.',
-                'Item shape for mix: combine one of each available type.',
+                'Item shape for mix must be card games only: {type:"match", question, pairs:[{left,right}], time_limit_seconds} and/or {type:"memory", question, pairs:[{front,back}], grid_columns, preview_ms}.',
             ],
             'source_items' => $sample,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -122,6 +124,10 @@ class AiExerciseGenerator
             }
 
             $type = (string) ($item['type'] ?? '');
+
+            if ($mode === 'mix' && ! in_array($type, ['match', 'memory'], true)) {
+                continue;
+            }
 
             if ($mode !== 'mix' && $type !== '' && $type !== $this->expectedType($mode)) {
                 continue;
@@ -223,10 +229,89 @@ class AiExerciseGenerator
                     'word' => $allowedLookup[mb_strtolower($word)],
                     'hint' => (string) ($item['hint'] ?? ''),
                 ];
+                continue;
+            }
+
+            if ($type === 'match') {
+                $pairs = collect($item['pairs'] ?? [])
+                    ->filter(fn ($pair) => is_array($pair))
+                    ->map(function ($pair) use ($allowedLookup) {
+                        $left = trim((string) ($pair['left'] ?? ''));
+                        $right = trim((string) ($pair['right'] ?? ''));
+
+                        if ($left === '' || $right === '') {
+                            return null;
+                        }
+
+                        if (! isset($allowedLookup[mb_strtolower($left)])) {
+                            return null;
+                        }
+
+                        return [
+                            'left' => $allowedLookup[mb_strtolower($left)],
+                            'right' => $right,
+                        ];
+                    })
+                    ->filter(fn ($pair) => is_array($pair))
+                    ->unique(fn ($pair) => mb_strtolower($pair['left']))
+                    ->take(18)
+                    ->values()
+                    ->all();
+
+                if (count($pairs) < 3) {
+                    continue;
+                }
+
+                $normalized[] = [
+                    'type' => 'match',
+                    'question' => (string) ($item['question'] ?? 'Match the pairs as fast as possible.'),
+                    'pairs' => $pairs,
+                    'time_limit_seconds' => max(25, min(120, (int) ($item['time_limit_seconds'] ?? 60))),
+                ];
+                continue;
+            }
+
+            if ($type === 'memory') {
+                $pairs = collect($item['pairs'] ?? [])
+                    ->filter(fn ($pair) => is_array($pair))
+                    ->map(function ($pair) use ($allowedLookup) {
+                        $front = trim((string) ($pair['front'] ?? ''));
+                        $back = trim((string) ($pair['back'] ?? ''));
+
+                        if ($front === '' || $back === '') {
+                            return null;
+                        }
+
+                        if (! isset($allowedLookup[mb_strtolower($front)])) {
+                            return null;
+                        }
+
+                        return [
+                            'front' => $allowedLookup[mb_strtolower($front)],
+                            'back' => $back,
+                        ];
+                    })
+                    ->filter(fn ($pair) => is_array($pair))
+                    ->unique(fn ($pair) => mb_strtolower($pair['front']))
+                    ->take(18)
+                    ->values()
+                    ->all();
+
+                if (count($pairs) < 4) {
+                    continue;
+                }
+
+                $normalized[] = [
+                    'type' => 'memory',
+                    'question' => (string) ($item['question'] ?? 'Memory Matrix: find all translation pairs.'),
+                    'pairs' => $pairs,
+                    'grid_columns' => in_array((int) ($item['grid_columns'] ?? 6), [4, 6], true) ? (int) ($item['grid_columns'] ?? 6) : 6,
+                    'preview_ms' => max(500, min(2200, (int) ($item['preview_ms'] ?? 900))),
+                ];
             }
         }
 
-        return array_slice($normalized, 0, 5);
+        return array_slice($normalized, 0, $mode === 'mix' ? 2 : 5);
     }
 
     private function expectedType(string $mode): string
