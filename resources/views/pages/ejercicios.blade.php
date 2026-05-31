@@ -78,9 +78,6 @@
     </div>
     <div id="exerciseContent" class="ex-content"></div>
     <div class="ex-nav-btns" id="exNavBtns">
-      <button class="btn btn-outline-secondary" id="btnPrevEx" disabled>
-        <i class="bi bi-arrow-left"></i> {{ __('lexi.exercises.previous') }}
-      </button>
       <button class="btn btn-primary" id="btnNextEx">
         {{ __('lexi.exercises.next') }} <i class="bi bi-arrow-right"></i>
       </button>
@@ -1215,17 +1212,20 @@
   let sessionAnsweredItems = 0;
   let sessionCorrectItems = 0;
   let sessionAnswerRecords = [];
+  let answeredExerciseIndexes = new Set();
+  let autoPlayedListeningIndexes = new Set();
   let currentModeData = null;
   let runtimeRequestToken = 0;
 
   function renderExerciseLoading(title) {
     const content = document.getElementById('exerciseContent');
+    const nav = document.getElementById('exNavBtns');
     document.getElementById('exPanelTitle').textContent = title;
     document.getElementById('exProgress').textContent = tx('loading_short', 'Cargando...');
     document.getElementById('exProgressBar').style.width = '12%';
-    document.getElementById('btnPrevEx').disabled = true;
     document.getElementById('btnNextEx').disabled = true;
-    document.getElementById('btnNextEx').innerHTML = tx('loading_short', 'Cargando...');
+    document.getElementById('btnNextEx').innerHTML = tx('skip', 'Saltar') + ' <i class="bi bi-arrow-right"></i>';
+    if (nav) nav.hidden = true;
     content.innerHTML =
       '<div class="ex-loading-state" role="status" aria-live="polite">' +
       '<span class="ex-loading-spinner" aria-hidden="true"></span>' +
@@ -1238,6 +1238,28 @@
     sessionAnsweredItems = 0;
     sessionCorrectItems = 0;
     sessionAnswerRecords = [];
+    answeredExerciseIndexes = new Set();
+    autoPlayedListeningIndexes = new Set();
+  }
+
+  function updateNextButtonLabel(totalItems = null) {
+    const btnNext = document.getElementById('btnNextEx');
+    if (!btnNext) return;
+
+    const modeData = currentModeData || (currentMode ? getModeData(currentMode) : null);
+    const total = Number.isInteger(totalItems) ? totalItems : (modeData && Array.isArray(modeData.items) ? modeData.items.length : 0);
+
+    if (!total || currentIndex >= total - 1) {
+      btnNext.innerHTML = t('finish') + ' <i class="bi bi-check-lg"></i>';
+      return;
+    }
+
+    if (answeredExerciseIndexes.has(currentIndex)) {
+      btnNext.innerHTML = t('next') + ' <i class="bi bi-arrow-right"></i>';
+      return;
+    }
+
+    btnNext.innerHTML = tx('skip', 'Saltar') + ' <i class="bi bi-arrow-right"></i>';
   }
 
   function getRuntimeSelectionContext() {
@@ -1261,17 +1283,28 @@
 
   async function fetchRuntimeModeData(mode) {
     const context = getRuntimeSelectionContext();
+    const aiFirstModes = ['reading', 'listening', 'speaking', 'writing'];
 
     const response = await exerciseApiFetch('/api/exercise-runtime/start', {
       method: 'POST',
       body: JSON.stringify({
         mode,
+        require_ai: aiFirstModes.includes(mode),
+        quality_profile: aiFirstModes.includes(mode) ? 'exam_strict' : null,
         ...context,
       }),
     });
 
     if (!response.ok) {
-      throw new Error('runtime-start-failed');
+      let message = 'runtime-start-failed';
+      try {
+        const errorPayload = await response.json();
+        if (errorPayload && typeof errorPayload.message === 'string' && errorPayload.message.trim() !== '') {
+          message = errorPayload.message.trim();
+        }
+      } catch {
+      }
+      throw new Error(message);
     }
 
     const payload = await response.json();
@@ -1286,10 +1319,29 @@
     };
   }
 
+  function renderRuntimeUnavailable(title, reason) {
+    const content = document.getElementById('exerciseContent');
+    const nav = document.getElementById('exNavBtns');
+    document.getElementById('exPanelTitle').textContent = title;
+    document.getElementById('exProgress').textContent = tx('not_available_short', 'No disponible');
+    document.getElementById('exProgressBar').style.width = '0%';
+    document.getElementById('btnNextEx').disabled = true;
+    document.getElementById('btnNextEx').innerHTML = tx('skip', 'Saltar') + ' <i class="bi bi-arrow-right"></i>';
+    if (nav) nav.hidden = true;
+
+    content.innerHTML =
+      '<div class="ex-feedback ex-feedback--warn" style="display:block">' +
+      '<i class="bi bi-exclamation-triangle-fill"></i> ' +
+      String(reason || tx('ai_generation_failed', 'No se pudo generar un ejercicio de calidad con IA para esta selección.')) +
+      '</div>';
+  }
+
   function markExerciseItemResult(container, isCorrect, details = {}) {
     if (!container || container.dataset.evaluated === '1') return;
+    if (answeredExerciseIndexes.has(currentIndex)) return;
 
     container.dataset.evaluated = '1';
+    answeredExerciseIndexes.add(currentIndex);
     sessionAnsweredItems += 1;
     if (isCorrect) {
       sessionCorrectItems += 1;
@@ -1306,6 +1358,8 @@
       points_obtained: typeof details.pointsObtained === 'number' ? details.pointsObtained : (isCorrect ? 1 : 0),
       feedback: details.feedback || null,
     });
+
+    updateNextButtonLabel();
   }
 
   document.querySelectorAll('.exercise-card[data-mode]').forEach(card => {
@@ -1318,9 +1372,20 @@
 
   document.getElementById('btnBack').addEventListener('click', closePanel);
   document.getElementById('btnNextEx').addEventListener('click', nextExercise);
-  document.getElementById('btnPrevEx').addEventListener('click', prevExercise);
 
   async function openMode(mode) {
+    if (exerciseSourceSwitchInFlight) {
+      return;
+    }
+
+    const aiFirstModes = ['reading', 'listening', 'speaking', 'writing'];
+    const needsAiRuntime = aiFirstModes.includes(mode);
+
+    if (needsAiRuntime) {
+      await loadVocabularySources(t('loading_options'), true);
+    }
+
+    stopSpeechAudio();
     currentMode = mode;
     currentIndex = 0;
     resetExerciseSessionMetrics();
@@ -1331,10 +1396,25 @@
     document.getElementById('exercisePanel').hidden = false;
     const nav = document.getElementById('exNavBtns');
     if (nav) nav.hidden = false;
-    renderExerciseLoading(fallbackModeData.title);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     const token = ++runtimeRequestToken;
+
+    if (!needsAiRuntime) {
+      renderExerciseLoading(fallbackModeData.title);
+      await new Promise(resolve => window.setTimeout(resolve, 1000));
+      if (token !== runtimeRequestToken || currentMode !== mode) {
+        return;
+      }
+      currentModeData = fallbackModeData;
+      currentIndex = 0;
+      document.getElementById('btnNextEx').disabled = false;
+      renderExercise();
+      loadVocabularySources(t('loading_options'), false).catch(() => {});
+      return;
+    }
+
+    renderExerciseLoading(fallbackModeData.title);
 
     try {
       const runtimeData = await fetchRuntimeModeData(mode);
@@ -1348,10 +1428,17 @@
       } else {
         currentModeData = fallbackModeData;
       }
-    } catch {
+    } catch (error) {
       if (token !== runtimeRequestToken || currentMode !== mode) {
         return;
       }
+
+      if (['reading', 'listening', 'speaking', 'writing'].includes(mode)) {
+        currentModeData = null;
+        renderRuntimeUnavailable(fallbackModeData.title, error instanceof Error ? error.message : null);
+        return;
+      }
+
       currentModeData = fallbackModeData;
     }
 
@@ -1363,6 +1450,7 @@
   }
 
   function closePanel() {
+    stopSpeechAudio();
     document.getElementById('exercisePanel').hidden = true;
     document.getElementById('exerciseMenu').hidden = false;
     const nav = document.getElementById('exNavBtns');
@@ -1517,6 +1605,40 @@
     return [...voices].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] || null;
   }
 
+  function resolveSpeechVoicesForLang(langCode) {
+    if (!('speechSynthesis' in window)) return [];
+
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return [];
+
+    const normalizedLang = String(langCode || 'en').toLowerCase();
+    const wantedPrefix = normalizedLang === 'en' ? 'en' : normalizedLang;
+    const matching = voices.filter(voice => String(voice.lang || '').toLowerCase().startsWith(wantedPrefix));
+
+    return matching.length ? matching : voices;
+  }
+
+  function resolveListeningVoiceUri(item) {
+    if (!item || typeof item !== 'object') return null;
+    if (!('speechSynthesis' in window)) return null;
+
+    initSpeechVoices();
+
+    if (typeof item.__voice_uri === 'string' && item.__voice_uri.trim() !== '') {
+      return item.__voice_uri;
+    }
+
+    const candidates = resolveSpeechVoicesForLang(getActiveLang());
+    if (!candidates.length) return null;
+
+    const selectedVoice = candidates[currentIndex % candidates.length] || candidates[0];
+    const selectedUri = String(selectedVoice.voiceURI || selectedVoice.name || '').trim();
+
+    item.__voice_uri = selectedUri || null;
+
+    return item.__voice_uri;
+  }
+
   function initSpeechVoices() {
     if (uiAudio.voicesInitialized || !('speechSynthesis' in window)) return;
     uiAudio.voicesInitialized = true;
@@ -1529,20 +1651,37 @@
     window.speechSynthesis.onvoiceschanged = assignVoice;
   }
 
-  function speakTranscript(text) {
-    if (!('speechSynthesis' in window)) return;
+  function speakTranscript(text, preferredVoiceUri = null, events = {}) {
+    if (!('speechSynthesis' in window)) return null;
 
     try {
       initSpeechVoices();
       window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
       const utterance = new SpeechSynthesisUtterance(String(text || ''));
       const activeLang = String(getActiveLang() || 'en').toLowerCase();
       utterance.lang = activeLang === 'en' ? 'en-US' : `${activeLang}-${activeLang.toUpperCase()}`;
       utterance.rate = uiAudio.speechRate;
       utterance.pitch = uiAudio.speechPitch;
-      utterance.voice = uiAudio.preferredVoice || resolveSpeechVoice(activeLang);
+
+      const availableVoices = window.speechSynthesis.getVoices() || [];
+      const exactVoice = preferredVoiceUri
+        ? availableVoices.find(voice => (voice.voiceURI || voice.name) === preferredVoiceUri)
+        : null;
+
+      utterance.voice = exactVoice || uiAudio.preferredVoice || resolveSpeechVoice(activeLang);
+      if (typeof events.onEnd === 'function') utterance.onend = events.onEnd;
+      if (typeof events.onError === 'function') utterance.onerror = events.onError;
       window.speechSynthesis.speak(utterance);
+      return utterance;
     } catch {
+      return null;
+    }
+  }
+
+  function stopSpeechAudio() {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
     }
   }
 
@@ -1563,20 +1702,143 @@
     };
   }
 
+  function resolveListeningBaseText(item) {
+    const transcriptText = normalizeTextCandidate(item.transcript);
+    const sentenceText = normalizeTextCandidate(item.sentence);
+
+    if (transcriptText === '' && sentenceText === '') {
+      return '';
+    }
+
+    if (transcriptText.length >= sentenceText.length) {
+      return transcriptText;
+    }
+
+    return sentenceText;
+  }
+
+  function normalizeTextCandidate(value) {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+      const joined = value
+        .map(item => (typeof item === 'string' ? item.trim() : (item == null ? '' : String(item).trim())))
+        .filter(item => item !== '')
+        .join(' ');
+      return joined.trim();
+    }
+
+    if (value && typeof value === 'object') {
+      if (typeof value.text === 'string' && value.text.trim() !== '') {
+        return value.text.trim();
+      }
+
+      const joined = Object.values(value)
+        .map(item => (typeof item === 'string' ? item.trim() : (item == null ? '' : String(item).trim())))
+        .filter(item => item !== '')
+        .join(' ');
+      return joined.trim();
+    }
+
+    if (value == null) {
+      return '';
+    }
+
+    return String(value).trim();
+  }
+
+  function buildListeningSentenceWithGap(baseText, answerText, inputHtml) {
+    const normalizedBase = String(baseText || '').trim();
+    const normalizedAnswer = String(answerText || '').trim();
+
+    if (normalizedBase === '') {
+      return inputHtml;
+    }
+
+    if (normalizedBase.includes('________')) {
+      return normalizedBase.replace('________', inputHtml);
+    }
+
+    if (normalizedAnswer !== '') {
+      const escapedAnswer = normalizedAnswer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const answerRegex = new RegExp(escapedAnswer, 'gi');
+      if (answerRegex.test(normalizedBase)) {
+        return normalizedBase.replace(answerRegex, inputHtml);
+      }
+    }
+
+    return normalizedBase + ' ' + inputHtml;
+  }
+
+  function normalizeListeningSpeechText(baseText, answerText, questionText) {
+    const normalizedBase = normalizeTextCandidate(baseText);
+    const normalizedQuestion = normalizeTextCandidate(questionText);
+
+    const cleanForSpeech = (text) => {
+      if (text === '') return '';
+
+      const withoutPrefix = text
+        .replace(/^(audio\s*note|team\s*voice\s*message|professional\s*briefing)\s*\([^)]*\)\s*:\s*/i, '')
+        .replace(/^\s*["“]|["”]\s*$/g, '');
+
+      return withoutPrefix
+        .replace(/_{2,}/g, ' blank ')
+        .replace(/\bunderscore\b/gi, ' ')
+        .replace(/\bunder\s*score\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    const fromBase = cleanForSpeech(normalizedBase);
+    if (fromBase.length >= 3) {
+      return fromBase;
+    }
+
+    const fromQuestion = cleanForSpeech(normalizedQuestion);
+    if (fromQuestion.length >= 3) {
+      return fromQuestion;
+    }
+
+    return 'Listen and complete the sentence.';
+  }
+
+  function sanitizeListeningQuestion(questionText, answerText) {
+    const normalizedQuestion = normalizeTextCandidate(questionText);
+    const normalizedAnswer = normalizeTextCandidate(answerText);
+
+    if (normalizedQuestion === '') {
+      return tx('listening_question_default', 'Listen and type the missing expression.');
+    }
+
+    if (normalizedAnswer === '') {
+      return normalizedQuestion;
+    }
+
+    const escapedAnswer = normalizedAnswer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const answerRegex = new RegExp(escapedAnswer, 'i');
+
+    if (answerRegex.test(normalizedQuestion)) {
+      return tx('listening_question_default', 'Listen and type the missing expression.');
+    }
+
+    return normalizedQuestion;
+  }
+
   function renderExercise() {
     const modeData = currentModeData || getModeData(currentMode);
     const items = modeData.items;
     const total = items.length;
     const item = items[currentIndex];
+    const nav = document.getElementById('exNavBtns');
 
     document.getElementById('exPanelTitle').textContent = modeData.title;
 
     document.getElementById('exProgress').textContent = currentIndex + 1 + ' / ' + total;
     document.getElementById('exProgressBar').style.width = ((currentIndex + 1) / total * 100) + '%';
-    document.getElementById('btnPrevEx').disabled = currentIndex === 0;
-    document.getElementById('btnNextEx').innerHTML = currentIndex === total - 1
-      ? t('finish') + ' <i class="bi bi-check-lg"></i>'
-      : t('next') + ' <i class="bi bi-arrow-right"></i>';
+    updateNextButtonLabel(total);
+    if (nav) nav.hidden = false;
 
     const content = document.getElementById('exerciseContent');
     content.innerHTML = '';
@@ -1593,6 +1855,7 @@
   }
 
   function nextExercise() {
+    stopSpeechAudio();
     const modeData = currentModeData || getModeData(currentMode);
     const items = modeData.items;
     if (currentIndex < items.length - 1) {
@@ -1601,14 +1864,6 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       showCompletion();
-    }
-  }
-
-  function prevExercise() {
-    if (currentIndex > 0) {
-      currentIndex--;
-      renderExercise();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 
@@ -1672,26 +1927,27 @@
   }
 
   function renderFillin(container, item) {
+    const listeningBaseText = resolveListeningBaseText(item);
+    const listeningAnswerText = String(item.answer || '').trim();
+    const listeningQuestion = sanitizeListeningQuestion(item.question, listeningAnswerText);
+    const expectedAnswerLength = Math.max(4, String(item.answer || '').trim().length || 4);
+    const inputWidthCh = Math.max(8, Math.min(26, expectedAnswerLength + 2));
+    const inputHtml = '<input class="ex-input" type="text" autocomplete="off" spellcheck="false" style="width:' + inputWidthCh + 'ch">';
+    const sentenceWithInput = buildListeningSentenceWithGap(listeningBaseText, listeningAnswerText, inputHtml);
+
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-headphones"></i> ' + t('listening_label') + '</p>' +
-      '<div class="ex-audio-mock">' +
-      '<div class="ex-audio-wave"><span></span><span></span><span></span><span></span><span></span></div>' +
-      '<span class="ex-audio-label">' + t('simulated_audio') + '</span>' +
+      '<div class="ex-audio-player">' +
+      '<div class="ex-audio-track" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>' +
       '<div class="ex-audio-controls">' +
-      '<button class="btn btn-outline-secondary btn-sm ex-audio-play" type="button"><i class="bi bi-play-fill"></i> ' + tx('play_audio', 'Play audio') + '</button>' +
-      '<button class="btn btn-outline-secondary btn-sm ex-audio-stop" type="button"><i class="bi bi-stop-fill"></i> ' + tx('stop_audio', 'Stop') + '</button>' +
-      '<select class="form-select form-select-sm ex-audio-rate" aria-label="Playback speed">' +
-      '<option value="0.85">0.85x</option>' +
-      '<option value="0.92" selected>0.92x</option>' +
-      '<option value="1">1x</option>' +
-      '</select>' +
+      '<button class="btn btn-outline-secondary btn-sm ex-audio-toggle" type="button" aria-label="' + tx('play_audio', 'Play audio') + '" title="' + tx('play_audio', 'Play audio') + '"><i class="bi bi-play-fill"></i></button>' +
       '</div>' +
       '</div>' +
       '<button class="ex-transcript-toggle">' + t('show_transcript') + ' <i class="bi ' + t('close_transcript_icon_down') + '"></i></button>' +
-      '<div class="ex-transcript" hidden>' + item.transcript + '</div>' +
-      '<p class="ex-question">' + item.question + '</p>' +
-      '<div class="ex-fillin-wrap">' + item.sentence.replace('________', '<input class="ex-input" type="text" autocomplete="off" spellcheck="false" placeholder="...">') + '</div>' +
-      '<button class="btn btn-primary ex-check-btn">' + t('check') + '</button>' +
+      '<div class="ex-transcript" hidden>' + listeningBaseText + '</div>' +
+      '<p class="ex-question">' + listeningQuestion + '</p>' +
+      '<div class="ex-fillin-wrap">' + sentenceWithInput + '</div>' +
+      '<button class="btn btn-outline-secondary ex-check-btn">' + t('check') + '</button>' +
       '<div class="ex-feedback" hidden></div>';
 
     container.querySelector('.ex-transcript-toggle').addEventListener('click', function () {
@@ -1702,36 +1958,111 @@
         : t('hide_transcript') + ' <i class="bi ' + t('close_transcript_icon_up') + '"></i>';
     });
 
-    const playBtn = container.querySelector('.ex-audio-play');
-    const stopBtn = container.querySelector('.ex-audio-stop');
-    const rateSelect = container.querySelector('.ex-audio-rate');
+    const toggleBtn = container.querySelector('.ex-audio-toggle');
+    const toggleIcon = toggleBtn ? toggleBtn.querySelector('i') : null;
+    const audioSource = normalizeListeningSpeechText(listeningBaseText, listeningAnswerText, item.question);
+    const voiceUri = resolveListeningVoiceUri(item);
+    const renderIndex = currentIndex;
+    const autoPlayDelayMs = 200;
+    let isAudioPlaying = false;
+    let playbackSessionId = 0;
+    let retryTimerId = null;
 
-    if (rateSelect) {
-      rateSelect.value = String(uiAudio.speechRate);
-      rateSelect.addEventListener('change', () => {
-        const parsed = Number(rateSelect.value);
-        if (!Number.isNaN(parsed) && parsed > 0.6 && parsed < 1.4) {
-          uiAudio.speechRate = parsed;
+    const clearRetryTimer = () => {
+      if (retryTimerId !== null) {
+        clearTimeout(retryTimerId);
+        retryTimerId = null;
+      }
+    };
+
+    const setAudioPlayingState = (playing) => {
+      isAudioPlaying = playing;
+      if (!toggleBtn || !toggleIcon) return;
+
+      toggleBtn.classList.toggle('is-playing', playing);
+      toggleBtn.setAttribute('aria-label', playing ? tx('stop_audio', 'Stop audio') : tx('play_audio', 'Play audio'));
+      toggleBtn.setAttribute('title', playing ? tx('stop_audio', 'Stop audio') : tx('play_audio', 'Play audio'));
+      toggleIcon.className = playing ? 'bi bi-stop-fill' : 'bi bi-play-fill';
+    };
+
+    const stopListeningAudio = () => {
+      playbackSessionId += 1;
+      clearRetryTimer();
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      setAudioPlayingState(false);
+    };
+
+    const playListeningAudio = (allowVoiceFallback = true, sessionId = null) => {
+      const activeSessionId = sessionId === null ? (playbackSessionId + 1) : sessionId;
+      playbackSessionId = activeSessionId;
+      clearRetryTimer();
+      setAudioPlayingState(true);
+      const selectedVoiceUri = allowVoiceFallback ? voiceUri : null;
+      const utterance = speakTranscript(audioSource, selectedVoiceUri, {
+        onEnd: () => {
+          if (activeSessionId !== playbackSessionId) return;
+          setAudioPlayingState(false);
+        },
+        onError: () => {
+          if (activeSessionId !== playbackSessionId) return;
+          if (allowVoiceFallback) {
+            clearRetryTimer();
+            retryTimerId = window.setTimeout(() => {
+              if (activeSessionId !== playbackSessionId) return;
+              playListeningAudio(false, activeSessionId);
+            }, 140);
+            return;
+          }
+          setAudioPlayingState(false);
+        },
+      });
+
+      if (!utterance) {
+        if (activeSessionId !== playbackSessionId) return;
+        if (allowVoiceFallback) {
+          playListeningAudio(false, activeSessionId);
+          return;
         }
-      });
-    }
+        setAudioPlayingState(false);
+      }
+    };
 
-    if (playBtn) {
-      playBtn.addEventListener('click', () => {
-        speakTranscript(item.transcript || item.sentence || '');
-      });
-    }
+    const startAutoPlay = () => {
+      if (autoPlayedListeningIndexes.has(renderIndex)) {
+        return;
+      }
 
-    if (stopBtn) {
-      stopBtn.addEventListener('click', () => {
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
+      autoPlayedListeningIndexes.add(renderIndex);
+
+      window.setTimeout(() => {
+        if (currentMode !== 'listening' || currentIndex !== renderIndex) return;
+        playListeningAudio();
+      }, autoPlayDelayMs);
+    };
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        if (isAudioPlaying) {
+          stopListeningAudio();
+          return;
         }
+
+        playListeningAudio();
       });
     }
 
-    container.querySelector('.ex-check-btn').addEventListener('click', () => {
-      const val = container.querySelector('.ex-input').value.trim().toLowerCase();
+    const inputEl = container.querySelector('.ex-input');
+    const checkBtn = container.querySelector('.ex-check-btn');
+
+    if (!inputEl || !checkBtn) {
+      return;
+    }
+
+    checkBtn.addEventListener('click', () => {
+      stopListeningAudio();
+      const val = inputEl.value.trim().toLowerCase();
       const feedback = container.querySelector('.ex-feedback');
       if (val === item.answer.toLowerCase()) {
         playUiTone('success');
@@ -1740,7 +2071,7 @@
         markExerciseItemResult(container, true, {
           itemId: item.itemId,
           itemType: item.type,
-          prompt: item.question,
+          prompt: listeningQuestion,
           expectedAnswer: item.answer,
           answerText: val,
           feedback: t('correct'),
@@ -1752,7 +2083,7 @@
         markExerciseItemResult(container, false, {
           itemId: item.itemId,
           itemType: item.type,
-          prompt: item.question,
+          prompt: listeningQuestion,
           expectedAnswer: item.answer,
           answerText: val,
           feedback: t('incorrect'),
@@ -1761,9 +2092,11 @@
       feedback.hidden = false;
     });
 
-    container.querySelector('.ex-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') container.querySelector('.ex-check-btn').click();
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') checkBtn.click();
     });
+
+    startAutoPlay();
   }
 
   function renderPronounce(container, item) {
@@ -1828,7 +2161,7 @@
       '<p class="ex-prompt">' + item.prompt + '</p>' +
       '<div class="ex-sentence-box">' + item.sentence + '</div>' +
       '<textarea class="ex-textarea" placeholder="Escribe tu traducción aquí..."></textarea>' +
-      '<button class="btn btn-primary ex-check-btn">' + t('check') + '</button>' +
+      '<button class="btn btn-outline-secondary ex-check-btn">' + t('check') + '</button>' +
       '<div class="ex-feedback" hidden></div>';
 
     container.querySelector('.ex-check-btn').addEventListener('click', () => {
@@ -1961,6 +2294,8 @@
     let mistakes = 0;
     let gameFinished = false;
     let timerId = null;
+    let selectedLeftButton = null;
+    let selectedRightButton = null;
 
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-bezier2"></i> ' + tx('matching_label', 'Conectar columnas') + '</p>' +
@@ -1980,6 +2315,16 @@
     const feedback = container.querySelector('.ex-feedback');
     const timerEl = container.querySelector('.ex-match-timer');
     const countEl = container.querySelector('.ex-match-count');
+
+    const flashMismatch = (leftBtn, rightBtn) => {
+      [leftBtn, rightBtn].forEach(node => {
+        if (!node) return;
+        node.classList.remove('is-mismatch');
+        void node.offsetWidth;
+        node.classList.add('is-mismatch');
+        window.setTimeout(() => node.classList.remove('is-mismatch'), 240);
+      });
+    };
 
     const stopTimer = () => {
       if (timerId !== null) {
@@ -2055,6 +2400,7 @@
     const selectLeft = (button, value) => {
       if (matchedLeft.has(value)) return;
       selectedLeft = value;
+      selectedLeftButton = button;
       leftColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
       button.classList.add('is-selected');
       evaluateSelection();
@@ -2063,6 +2409,7 @@
     const selectRight = (button, value) => {
       if (matchedRight.has(value)) return;
       selectedRight = value;
+      selectedRightButton = button;
       rightColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
       button.classList.add('is-selected');
       evaluateSelection();
@@ -2079,12 +2426,15 @@
         matchedRight.add(selectedRight);
         solvedPairs.push({ left: selectedLeft, right: selectedRight });
       } else {
+        flashMismatch(selectedLeftButton, selectedRightButton);
         mistakes += 1;
       }
 
       feedback.hidden = true;
       selectedLeft = null;
       selectedRight = null;
+      selectedLeftButton = null;
+      selectedRightButton = null;
       leftColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
       rightColumn.querySelectorAll('.ex-match-btn').forEach(node => node.classList.remove('is-selected'));
       paintMatchedButtons();
@@ -2137,11 +2487,13 @@
   function renderMemory(container, item) {
     const sourcePairs = Array.isArray(item.pairs) ? item.pairs : [];
     const previewMs = Math.max(500, Math.min(2200, Number(item.preview_ms) || 900));
-    const columns = [4, 6].includes(Number(item.grid_columns)) ? Number(item.grid_columns) : (sourcePairs.length >= 12 ? 6 : 4);
+    const requestedColumns = Number(item.grid_columns) || 0;
+    const columns = Math.max(3, Math.min(5, requestedColumns || (sourcePairs.length >= 10 ? 5 : 4)));
+    const maxPairs = columns === 5 ? 10 : 8;
 
     const pairs = sourcePairs
       .filter(pair => pair && pair.front && pair.back)
-      .slice(0, columns === 6 ? 18 : 8);
+      .slice(0, maxPairs);
 
     const cards = shuffleArray(pairs.flatMap((pair, index) => ([
       { id: 'f-' + index, pairId: index, text: pair.front },
@@ -2172,6 +2524,17 @@
     const feedback = container.querySelector('.ex-feedback');
     const movesEl = container.querySelector('.ex-memory-moves');
     const countEl = container.querySelector('.ex-memory-count');
+
+    const longestCardTextLength = cards.reduce((maxLen, card) => Math.max(maxLen, String(card.text || '').trim().length), 0);
+    const baseCardHeight = columns === 5 ? 120 : 112;
+    const extraHeight = Math.max(0, Math.ceil((longestCardTextLength - 18) / 8) * 10);
+    const adaptiveCardHeight = Math.min(190, baseCardHeight + extraHeight);
+    const adaptiveFontSize = longestCardTextLength > 42 ? 0.78 : (columns === 5 ? 0.8 : 0.86);
+
+    if (board) {
+      board.style.setProperty('--memory-card-min-height', adaptiveCardHeight + 'px');
+      board.style.setProperty('--memory-card-font-size', adaptiveFontSize + 'rem');
+    }
 
     const cardState = new Map(cards.map(card => [card.id, { ...card, revealed: false, matched: false }]));
 

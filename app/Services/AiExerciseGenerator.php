@@ -3,10 +3,19 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Collection;
 
 class AiExerciseGenerator
 {
-    public function generate(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage, ?string $targetCefrLevel = null): ?array
+    public function generate(
+        string $mode,
+        array $sourceItems,
+        string $sourceType,
+        ?string $learningLanguage,
+        ?string $nativeLanguage,
+        ?string $targetCefrLevel = null,
+        string $qualityProfile = 'default'
+    ): ?array
     {
         $apiKey = (string) config('services.openai.api_key');
 
@@ -16,7 +25,7 @@ class AiExerciseGenerator
 
         $model = (string) config('services.openai.model', 'gpt-4o-mini');
         $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
-        $prompt = $this->buildPrompt($mode, $sourceItems, $sourceType, $learningLanguage, $nativeLanguage, $targetCefrLevel);
+        $prompt = $this->buildPrompt($mode, $sourceItems, $sourceType, $learningLanguage, $nativeLanguage, $targetCefrLevel, $qualityProfile);
         $request = Http::timeout(15)->withToken($apiKey);
 
         if (str_contains(strtolower($baseUrl), 'openrouter.ai')) {
@@ -26,34 +35,34 @@ class AiExerciseGenerator
             ]);
         }
 
-        $response = $request->post($baseUrl . '/chat/completions', [
-                'model' => $model,
-                'temperature' => 0.4,
-                'response_format' => ['type' => 'json_object'],
-                'messages' => [
-                    [
-                        'role' => 'system',
-                        'content' => 'You generate language-learning exercises. Return only valid JSON.',
-                    ],
-                    [
-                        'role' => 'user',
-                        'content' => $prompt,
-                    ],
-                ],
-            ]);
+        $generation = $this->requestGeneration(
+            $request,
+            $baseUrl,
+            $model,
+            $prompt,
+            0.35,
+            true
+        );
 
-        if (! $response->ok()) {
-            return null;
+        if ($generation === null) {
+            $rescuePrompt = $this->buildRescuePrompt($mode, $sourceItems, $sourceType, $learningLanguage, $nativeLanguage, $targetCefrLevel);
+            $generation = $this->requestGeneration(
+                $request,
+                $baseUrl,
+                $model,
+                $rescuePrompt,
+                0.2,
+                false
+            );
+
+            if ($generation === null) {
+                return null;
+            }
         }
 
-        $payload = $response->json();
-        $content = $payload['choices'][0]['message']['content'] ?? null;
-
-        if (! is_string($content) || trim($content) === '') {
-            return null;
-        }
-
-        $decoded = json_decode($this->stripCodeFences($content), true);
+        $payload = $generation['payload'];
+        $content = $generation['content'];
+        $decoded = $generation['decoded'];
 
         if (! is_array($decoded) || ! isset($decoded['items']) || ! is_array($decoded['items'])) {
             return null;
@@ -62,6 +71,14 @@ class AiExerciseGenerator
         $items = $this->normalizeItems($mode, $decoded['items'], $sourceItems);
 
         if ($items === []) {
+            return null;
+        }
+
+        if ($qualityProfile === 'exam_strict' && $mode === 'reading') {
+            $items = $this->filterExamStrictReadingItems($items, $sourceItems);
+        }
+
+        if (! $this->passesQualityGate($mode, $items, $sourceItems, $qualityProfile)) {
             return null;
         }
 
@@ -77,7 +94,7 @@ class AiExerciseGenerator
         ];
     }
 
-    private function buildPrompt(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage, ?string $targetCefrLevel): string
+    private function buildPrompt(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage, ?string $targetCefrLevel, string $qualityProfile = 'default'): string
     {
         $sample = array_slice($sourceItems, 0, 24);
 
@@ -88,6 +105,7 @@ class AiExerciseGenerator
             'learning_language' => $learningLanguage,
             'native_language' => $nativeLanguage,
             'target_cefr_level' => $targetCefrLevel,
+            'quality_profile' => $qualityProfile,
             'rules' => [
                 'Use only words from source_items for options/answers in learning language.',
                 'Avoid mixing scripts/languages in options.',
@@ -95,6 +113,7 @@ class AiExerciseGenerator
                 'Return 3-5 items.',
                 'Output JSON with {title, items}.',
                 'Item shape for reading: {type:"mcq", passage, question, options:string[], correct:number}.',
+                'Reading quality guard: no duplicated sentence/passage chunks, no repeated scenario lines, and question must naturally match the passage.',
                 'Item shape for writing: {type:"translate", prompt, sentence, answer}.',
                 'Item shape for listening: {type:"fillin", transcript, question, sentence, answer}.',
                 'Item shape for speaking: {type:"pronounce", word, hint}.',
@@ -102,6 +121,211 @@ class AiExerciseGenerator
             ],
             'source_items' => $sample,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function buildRescuePrompt(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage, ?string $targetCefrLevel): string
+    {
+        $sample = array_slice($sourceItems, 0, 36);
+        $allowedWords = collect($sample)
+            ->pluck('text')
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => trim((string) $word))
+            ->values()
+            ->all();
+
+        return json_encode([
+            'task' => 'Rescue generation. Return strictly valid JSON object with keys: title and items.',
+            'mode' => $mode,
+            'source_type' => $sourceType,
+            'learning_language' => $learningLanguage,
+            'native_language' => $nativeLanguage,
+            'target_cefr_level' => $targetCefrLevel,
+            'allowed_words_exact' => $allowedWords,
+            'hard_constraints' => [
+                'Use exact spellings from allowed_words_exact for answers and options in learning language.',
+                'For reading MCQ, include 3-4 options and one correct index.',
+                'Return 3-5 items.',
+                'Do not include markdown or explanation text around JSON.',
+            ],
+            'source_items' => $sample,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function passesQualityGate(string $mode, array $items, array $sourceItems, string $qualityProfile): bool
+    {
+        if ($qualityProfile !== 'exam_strict') {
+            return true;
+        }
+
+        if ($mode !== 'reading') {
+            return true;
+        }
+
+        if (count($items) < 2) {
+            return false;
+        }
+
+        foreach ($items as $item) {
+            if (!is_array($item) || ($item['type'] ?? null) !== 'mcq') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function filterExamStrictReadingItems(array $items, array $sourceItems): array
+    {
+        $sourceWordSet = collect($sourceItems)
+            ->pluck('text')
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => mb_strtolower(trim((string) $word)))
+            ->values()
+            ->all();
+
+        $sourceLookup = array_fill_keys($sourceWordSet, true);
+
+        $filtered = [];
+
+        foreach ($items as $item) {
+            if (!is_array($item) || ($item['type'] ?? null) !== 'mcq') {
+                continue;
+            }
+
+            $passage = trim((string) ($item['passage'] ?? ''));
+            $question = trim((string) ($item['question'] ?? ''));
+            $options = is_array($item['options'] ?? null) ? $item['options'] : [];
+            $correct = isset($item['correct']) ? (int) $item['correct'] : -1;
+
+            if ($passage === '' || mb_strlen($passage) < 24 || $question === '' || mb_strlen($question) < 6 || count($options) < 3) {
+                continue;
+            }
+
+            if ($this->hasStrongDuplicateChunk($passage)) {
+                continue;
+            }
+
+            if ($correct < 0 || $correct >= count($options)) {
+                continue;
+            }
+
+            $validOptions = true;
+            foreach ($options as $option) {
+                if (!is_string($option) || trim($option) === '') {
+                    $validOptions = false;
+                    break;
+                }
+
+                if (!isset($sourceLookup[mb_strtolower(trim($option))])) {
+                    $validOptions = false;
+                    break;
+                }
+            }
+
+            if (! $validOptions) {
+                continue;
+            }
+
+            $filtered[] = $item;
+        }
+
+        return $filtered;
+    }
+
+    private function hasStrongDuplicateChunk(string $text): bool
+    {
+        $normalized = mb_strtolower(preg_replace('/\s+/u', ' ', trim($text)) ?? '');
+
+        if ($normalized === '') {
+            return false;
+        }
+
+        $sentences = preg_split('/(?<=[.!?])\s+/u', $normalized) ?: [];
+        $seen = [];
+
+        foreach ($sentences as $sentence) {
+            $clean = trim($sentence);
+            if ($clean === '') {
+                continue;
+            }
+
+            if (isset($seen[$clean])) {
+                return true;
+            }
+
+            $seen[$clean] = true;
+        }
+
+        return false;
+    }
+
+    private function requestGeneration($request, string $baseUrl, string $model, string $prompt, float $temperature, bool $strictJson): ?array
+    {
+        $body = [
+            'model' => $model,
+            'temperature' => $temperature,
+            'messages' => [
+                [
+                    'role' => 'system',
+                    'content' => 'You generate language-learning exercises. Return only valid JSON.',
+                ],
+                [
+                    'role' => 'user',
+                    'content' => $prompt,
+                ],
+            ],
+        ];
+
+        if ($strictJson) {
+            $body['response_format'] = ['type' => 'json_object'];
+        }
+
+        $response = $request->post($baseUrl . '/chat/completions', $body);
+
+        if (! $response->ok()) {
+            return null;
+        }
+
+        $payload = $response->json();
+        $content = $payload['choices'][0]['message']['content'] ?? null;
+
+        if (! is_string($content) || trim($content) === '') {
+            return null;
+        }
+
+        $decoded = $this->decodeJsonObject($content);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        return [
+            'payload' => $payload,
+            'content' => $content,
+            'decoded' => $decoded,
+        ];
+    }
+
+    private function decodeJsonObject(string $content): ?array
+    {
+        $trimmed = $this->stripCodeFences($content);
+        $decoded = json_decode($trimmed, true);
+
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        $first = strpos($trimmed, '{');
+        $last = strrpos($trimmed, '}');
+
+        if ($first === false || $last === false || $last <= $first) {
+            return null;
+        }
+
+        $candidate = substr($trimmed, $first, $last - $first + 1);
+        $decodedCandidate = json_decode($candidate, true);
+
+        return is_array($decodedCandidate) ? $decodedCandidate : null;
     }
 
     private function normalizeItems(string $mode, array $items, array $sourceItems): array
@@ -149,14 +373,27 @@ class AiExerciseGenerator
                     ? trim((string) $item['options'][$correct])
                     : null;
 
-                if ($correctText !== null && isset($allowedLookup[mb_strtolower($correctText)]) && !in_array($allowedLookup[mb_strtolower($correctText)], $options, true)) {
-                    $options[] = $allowedLookup[mb_strtolower($correctText)];
+                if (($correctText === null || $correctText === '') && isset($item['answer']) && is_string($item['answer'])) {
+                    $correctText = trim((string) $item['answer']);
+                }
+
+                $normalizedCorrectText = $correctText !== null && isset($allowedLookup[mb_strtolower($correctText)])
+                    ? $allowedLookup[mb_strtolower($correctText)]
+                    : null;
+
+                if ($normalizedCorrectText !== null && !in_array($normalizedCorrectText, $options, true)) {
+                    $options[] = $normalizedCorrectText;
                 }
 
                 $options = array_values(array_unique($options));
-                $resolvedCorrect = $correctText !== null && isset($allowedLookup[mb_strtolower($correctText)])
-                    ? array_search($allowedLookup[mb_strtolower($correctText)], $options, true)
+                $resolvedCorrect = $normalizedCorrectText !== null
+                    ? array_search($normalizedCorrectText, $options, true)
                     : false;
+
+                if ($normalizedCorrectText !== null) {
+                    $options = $this->ensureMcqOptions($options, $normalizedCorrectText, $allowedSourceWords, 4);
+                    $resolvedCorrect = array_search($normalizedCorrectText, $options, true);
+                }
 
                 if (count($options) < 2 || $resolvedCorrect === false) {
                     continue;
@@ -164,8 +401,8 @@ class AiExerciseGenerator
 
                 $normalized[] = [
                     'type' => 'mcq',
-                    'passage' => (string) ($item['passage'] ?? ''),
-                    'question' => (string) ($item['question'] ?? 'Select the correct answer'),
+                    'passage' => $this->textValue($item['passage'] ?? ''),
+                    'question' => $this->textValue($item['question'] ?? 'Select the correct answer', 'Select the correct answer'),
                     'options' => $options,
                     'correct' => (int) $resolvedCorrect,
                 ];
@@ -177,7 +414,7 @@ class AiExerciseGenerator
                     continue;
                 }
 
-                $answer = trim((string) $item['answer']);
+                $answer = $this->textValue($item['answer']);
 
                 if (!isset($allowedLookup[mb_strtolower($answer)])) {
                     continue;
@@ -185,8 +422,8 @@ class AiExerciseGenerator
 
                 $normalized[] = [
                     'type' => 'translate',
-                    'prompt' => (string) ($item['prompt'] ?? 'Translate'),
-                    'sentence' => (string) $item['sentence'],
+                    'prompt' => $this->textValue($item['prompt'] ?? 'Translate', 'Translate'),
+                    'sentence' => $this->textValue($item['sentence']),
                     'answer' => $allowedLookup[mb_strtolower($answer)],
                 ];
                 continue;
@@ -197,7 +434,7 @@ class AiExerciseGenerator
                     continue;
                 }
 
-                $answer = trim((string) $item['answer']);
+                $answer = $this->textValue($item['answer']);
 
                 if (!isset($allowedLookup[mb_strtolower($answer)])) {
                     continue;
@@ -205,9 +442,9 @@ class AiExerciseGenerator
 
                 $normalized[] = [
                     'type' => 'fillin',
-                    'transcript' => (string) ($item['transcript'] ?? ''),
-                    'question' => (string) ($item['question'] ?? 'Complete the sentence'),
-                    'sentence' => (string) $item['sentence'],
+                    'transcript' => $this->textValue($item['transcript'] ?? ''),
+                    'question' => $this->textValue($item['question'] ?? 'Complete the sentence', 'Complete the sentence'),
+                    'sentence' => $this->textValue($item['sentence']),
                     'answer' => $allowedLookup[mb_strtolower($answer)],
                 ];
                 continue;
@@ -218,7 +455,7 @@ class AiExerciseGenerator
                     continue;
                 }
 
-                $word = trim((string) $item['word']);
+                $word = $this->textValue($item['word']);
 
                 if (!isset($allowedLookup[mb_strtolower($word)])) {
                     continue;
@@ -227,7 +464,7 @@ class AiExerciseGenerator
                 $normalized[] = [
                     'type' => 'pronounce',
                     'word' => $allowedLookup[mb_strtolower($word)],
-                    'hint' => (string) ($item['hint'] ?? ''),
+                    'hint' => $this->textValue($item['hint'] ?? ''),
                 ];
                 continue;
             }
@@ -236,8 +473,8 @@ class AiExerciseGenerator
                 $pairs = collect($item['pairs'] ?? [])
                     ->filter(fn ($pair) => is_array($pair))
                     ->map(function ($pair) use ($allowedLookup) {
-                        $left = trim((string) ($pair['left'] ?? ''));
-                        $right = trim((string) ($pair['right'] ?? ''));
+                        $left = $this->textValue($pair['left'] ?? '');
+                        $right = $this->textValue($pair['right'] ?? '');
 
                         if ($left === '' || $right === '') {
                             return null;
@@ -264,7 +501,7 @@ class AiExerciseGenerator
 
                 $normalized[] = [
                     'type' => 'match',
-                    'question' => (string) ($item['question'] ?? 'Match the pairs as fast as possible.'),
+                    'question' => $this->textValue($item['question'] ?? 'Match the pairs as fast as possible.', 'Match the pairs as fast as possible.'),
                     'pairs' => $pairs,
                     'time_limit_seconds' => max(25, min(120, (int) ($item['time_limit_seconds'] ?? 60))),
                 ];
@@ -275,8 +512,8 @@ class AiExerciseGenerator
                 $pairs = collect($item['pairs'] ?? [])
                     ->filter(fn ($pair) => is_array($pair))
                     ->map(function ($pair) use ($allowedLookup) {
-                        $front = trim((string) ($pair['front'] ?? ''));
-                        $back = trim((string) ($pair['back'] ?? ''));
+                        $front = $this->textValue($pair['front'] ?? '');
+                        $back = $this->textValue($pair['back'] ?? '');
 
                         if ($front === '' || $back === '') {
                             return null;
@@ -303,7 +540,7 @@ class AiExerciseGenerator
 
                 $normalized[] = [
                     'type' => 'memory',
-                    'question' => (string) ($item['question'] ?? 'Memory Matrix: find all translation pairs.'),
+                    'question' => $this->textValue($item['question'] ?? 'Memory Matrix: find all translation pairs.', 'Memory Matrix: find all translation pairs.'),
                     'pairs' => $pairs,
                     'grid_columns' => in_array((int) ($item['grid_columns'] ?? 6), [4, 6], true) ? (int) ($item['grid_columns'] ?? 6) : 6,
                     'preview_ms' => max(500, min(2200, (int) ($item['preview_ms'] ?? 900))),
@@ -312,6 +549,38 @@ class AiExerciseGenerator
         }
 
         return array_slice($normalized, 0, $mode === 'mix' ? 2 : 5);
+    }
+
+    private function ensureMcqOptions(array $options, string $correct, Collection $allowedSourceWords, int $target): array
+    {
+        $uniqueOptions = collect($options)
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => trim((string) $word))
+            ->unique()
+            ->values();
+
+        if (! $uniqueOptions->contains($correct)) {
+            $uniqueOptions->prepend($correct);
+        }
+
+        if ($uniqueOptions->count() < $target) {
+            $distractors = $allowedSourceWords
+                ->filter(fn ($word) => mb_strtolower($word) !== mb_strtolower($correct))
+                ->shuffle()
+                ->values();
+
+            foreach ($distractors as $candidate) {
+                if (! $uniqueOptions->contains($candidate)) {
+                    $uniqueOptions->push($candidate);
+                }
+
+                if ($uniqueOptions->count() >= $target) {
+                    break;
+                }
+            }
+        }
+
+        return $uniqueOptions->take($target)->values()->all();
     }
 
     private function expectedType(string $mode): string
@@ -359,5 +628,46 @@ class AiExerciseGenerator
         $usd = (($promptTokens / 1000000) * $inputPerMillion) + (($completionTokens / 1000000) * $outputPerMillion);
 
         return max(0, (int) round($usd * 100));
+    }
+
+    private function textValue(mixed $value, string $default = ''): string
+    {
+        if (is_string($value)) {
+            $text = trim($value);
+            return $text !== '' ? $text : $default;
+        }
+
+        if (is_scalar($value)) {
+            $text = trim((string) $value);
+            return $text !== '' ? $text : $default;
+        }
+
+        if (is_array($value)) {
+            $parts = collect($value)
+                ->flatMap(function ($part) {
+                    if (is_array($part)) {
+                        return $part;
+                    }
+                    return [$part];
+                })
+                ->map(function ($part) {
+                    if (is_scalar($part)) {
+                        return trim((string) $part);
+                    }
+                    return '';
+                })
+                ->filter(fn ($part) => $part !== '')
+                ->values();
+
+            $joined = $parts->implode(' ');
+            return $joined !== '' ? $joined : $default;
+        }
+
+        if (is_object($value) && method_exists($value, '__toString')) {
+            $text = trim((string) $value);
+            return $text !== '' ? $text : $default;
+        }
+
+        return $default;
     }
 }

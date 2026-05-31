@@ -24,7 +24,13 @@ class ExerciseController extends Controller
             'language' => ['nullable', Rule::exists('languages', 'code')],
             'level' => ['nullable', 'string', 'max:8'],
             'topic' => ['nullable', 'string', 'max:80'],
+            'require_ai' => ['nullable', 'boolean'],
+            'quality_profile' => ['nullable', Rule::in(['default', 'exam_strict'])],
         ]);
+
+        $aiFirstModes = ['reading', 'listening', 'speaking', 'writing'];
+        $requiresAi = (bool) ($validated['require_ai'] ?? false)
+            && in_array($validated['mode'], $aiFirstModes, true);
 
         $language = $validated['language'] ?? null;
         $preferredTranslationLanguage = $request->user()?->mother_tongue_code ?: 'es';
@@ -46,6 +52,15 @@ class ExerciseController extends Controller
         $aiRuntimeEnabled = (bool) config('services.openai.exercise_runtime_enabled', false);
         $supportsAiGeneration = $aiRuntimeEnabled
             && in_array($validated['mode'], ['reading', 'listening', 'speaking', 'writing', 'mix'], true);
+
+        if ($requiresAi && ! $supportsAiGeneration) {
+            return response()->json([
+                'ok' => false,
+                'code' => 'ai_unavailable',
+                'message' => 'AI generation is required for this exercise mode, but AI runtime is disabled.',
+            ], 503);
+        }
+
         $aiResult = $supportsAiGeneration
             ? app(AiExerciseGenerator::class)->generate(
                 $validated['mode'],
@@ -53,14 +68,41 @@ class ExerciseController extends Controller
                 $validated['source_type'],
                 $language,
                 $request->user()?->mother_tongue_code,
-                $validated['level'] ?? null
+                $validated['level'] ?? null,
+                $validated['quality_profile'] ?? 'default'
             )
             : null;
+
+        $usedAiFallback = false;
 
         if (is_array($aiResult) && isset($aiResult['items']) && is_array($aiResult['items']) && $aiResult['items'] !== []) {
             $items = $aiResult['items'];
             $title = !empty($aiResult['title']) ? (string) $aiResult['title'] : $title;
             $this->logAiGeneration($request, $validated, $aiResult, 'approved');
+        } elseif ($requiresAi) {
+            $fallbackItems = $this->guaranteedRuntimeItemsForMode(
+                $validated['mode'],
+                $items,
+                $sourceItems,
+                $validated['level'] ?? null
+            );
+
+            if ($fallbackItems === []) {
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'ai_generation_failed',
+                    'message' => 'No se pudieron generar ejercicios de calidad con IA para esta selección. Prueba otro nivel/tema o vuelve a intentar.',
+                ], 422);
+            }
+
+            $items = $fallbackItems;
+            $usedAiFallback = true;
+            $this->logAiGeneration($request, $validated, [
+                'model' => $aiResult['model'] ?? 'ai-fallback-runtime',
+                'prompt' => $aiResult['prompt'] ?? '',
+                'response' => $aiResult['response'] ?? '',
+                'estimated_cost_cents' => $aiResult['estimated_cost_cents'] ?? 0,
+            ], 'fallback');
         }
 
         $this->rememberRecentlyUsedWords(
@@ -76,6 +118,7 @@ class ExerciseController extends Controller
             'mode' => $validated['mode'],
             'title' => $title,
             'items' => $items,
+            'ai_fallback_used' => $usedAiFallback,
         ]);
     }
 
@@ -479,6 +522,94 @@ class ExerciseController extends Controller
         };
     }
 
+    private function guaranteedRuntimeItemsForMode(string $mode, array $currentItems, array $sourceItems, ?string $requestedLevel = null): array
+    {
+        if ($currentItems !== []) {
+            return $currentItems;
+        }
+
+        $effectiveLevel = $this->resolveDifficultyLevel($requestedLevel, $sourceItems);
+        $sourceWords = collect($sourceItems)
+            ->pluck('text')
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => trim((string) $word))
+            ->unique()
+            ->values();
+
+        if ($sourceWords->count() === 0) {
+            $sourceWords = collect(['practice', 'review', 'answer', 'lesson']);
+        }
+
+        return match ($mode) {
+            'reading' => $this->buildEmergencyReadingRuntimeItems($sourceWords->all(), $effectiveLevel),
+            'listening' => $sourceWords->take(3)->map(fn ($word) => [
+                'type' => 'fillin',
+                'itemId' => null,
+                'transcript' => sprintf('Short audio cue: "%s".', $word),
+                'question' => 'Type the exact word you hear.',
+                'sentence' => 'The speaker says ________.',
+                'answer' => $word,
+            ])->values()->all(),
+            'writing' => $sourceWords->take(4)->map(fn ($word) => [
+                'type' => 'translate',
+                'itemId' => null,
+                'prompt' => 'Write the same target-language word with correct spelling.',
+                'sentence' => sprintf('Target word: "%s"', $word),
+                'answer' => $word,
+            ])->values()->all(),
+            'speaking' => $sourceWords->take(5)->map(fn ($word) => [
+                'type' => 'pronounce',
+                'itemId' => null,
+                'word' => $word,
+                'hint' => 'Say the word clearly and then use it in one short sentence.',
+            ])->values()->all(),
+            default => $currentItems,
+        };
+    }
+
+    private function buildEmergencyReadingRuntimeItems(array $sourceWords, string $difficultyLevel = 'B1'): array
+    {
+        $pool = collect($sourceWords)
+            ->filter(fn ($word) => is_string($word) && trim($word) !== '')
+            ->map(fn ($word) => trim((string) $word))
+            ->unique()
+            ->values();
+
+        if ($pool->count() < 2) {
+            return [];
+        }
+
+        $optionsLimit = $pool->count() >= 4 ? 4 : 3;
+
+        return $pool->shuffle()->take(4)->map(function ($correctWord) use ($pool, $optionsLimit, $difficultyLevel) {
+            $wrong = $pool
+                ->filter(fn ($word) => mb_strtolower($word) !== mb_strtolower($correctWord))
+                ->shuffle()
+                ->take(max(1, $optionsLimit - 1))
+                ->values()
+                ->all();
+
+            $options = collect(array_merge([$correctWord], $wrong))
+                ->unique()
+                ->take($optionsLimit)
+                ->shuffle()
+                ->values();
+
+            if ($options->count() < 2) {
+                return null;
+            }
+
+            return [
+                'type' => 'mcq',
+                'itemId' => null,
+                'passage' => sprintf('Focused reading practice (%s): choose the target word that best fits the sentence context.', $difficultyLevel),
+                'question' => 'Select the best option for the blank.',
+                'options' => $options->all(),
+                'correct' => $options->search($correctWord),
+            ];
+        })->filter(fn ($item) => is_array($item) && $item['correct'] !== false)->values()->all();
+    }
+
     private function buildFlashcardRuntimeItems(array $items): array
     {
         return collect($items)
@@ -655,9 +786,9 @@ class ExerciseController extends Controller
 
                 $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
                 $transcriptTemplate = match ($difficultyLevel) {
-                    'A1', 'A2' => 'Audio note (%s): "Before we begin, please %s and then sit near the front."',
-                    'B1', 'B2' => 'Team voice message (%s): "Before the review starts, everyone should %s so the discussion stays focused."',
-                    default => 'Professional briefing (%s): "Before the panel review, each candidate is expected to %s to ensure consistency, precision, and register control."',
+                    'A1', 'A2' => 'Before we begin at the %s center, please %s and then sit near the front so we can start on time.',
+                    'B1', 'B2' => 'Before the review starts in the %s group, everyone should %s so the discussion stays focused and productive for all participants.',
+                    default => 'Before the panel review in the %s session, each candidate is expected to %s to ensure consistency, precision, and an appropriate professional register throughout the task.',
                 };
                 $question = match ($difficultyLevel) {
                     'A1', 'A2' => 'Listen and type the missing expression.',

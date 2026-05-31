@@ -1248,6 +1248,205 @@ PHP);
         ]);
     }
 
+    public function test_exercise_runtime_start_exam_strict_accepts_valid_reading_without_choose_keyword(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+        $this->seedLanguages();
+
+        config()->set('services.openai.api_key', 'test-key');
+        config()->set('services.openai.model', 'gpt-4o-mini');
+        config()->set('services.openai.exercise_runtime_enabled', true);
+
+        Http::fake([
+            '*' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'title' => 'AI Reading Strict',
+                            'items' => [
+                                [
+                                    'type' => 'mcq',
+                                    'passage' => 'At the airport, Marta checks her ticket before boarding the plane to avoid delays.',
+                                    'question' => 'Que palabra describe el documento para viajar?',
+                                    'options' => ['airport', 'ticket', 'hotel', 'station'],
+                                    'correct' => 1,
+                                ],
+                                [
+                                    'type' => 'mcq',
+                                    'passage' => 'After leaving the station, they went straight to the hotel near the city center.',
+                                    'question' => 'Cual es el lugar donde pasan la noche?',
+                                    'options' => ['airport', 'ticket', 'hotel', 'station'],
+                                    'correct' => 2,
+                                ],
+                            ],
+                        ]),
+                    ],
+                ]],
+                'usage' => [
+                    'prompt_tokens' => 120,
+                    'completion_tokens' => 80,
+                ],
+            ], 200),
+        ]);
+
+        $user = User::factory()->create();
+        $categoryId = DB::table('categories')->insertGetId([
+            'name' => 'Travel',
+            'language_code' => 'en',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $pairs = [
+            ['airport', 'aeropuerto'],
+            ['ticket', 'billete'],
+            ['hotel', 'hotel'],
+            ['station', 'estacion'],
+        ];
+
+        foreach ($pairs as [$sourceText, $targetText]) {
+            $sourceId = DB::table('words')->insertGetId([
+                'client_key' => 'src-strict-' . $sourceText,
+                'text' => $sourceText,
+                'language_code' => 'en',
+                'category_id' => $categoryId,
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $targetId = DB::table('words')->insertGetId([
+                'client_key' => 'dst-strict-' . $targetText,
+                'text' => $targetText,
+                'language_code' => 'es',
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('translations')->insert([
+                'source_word_id' => $sourceId,
+                'target_word_id' => $targetId,
+                'created_at' => now(),
+            ]);
+
+            DB::table('user_words')->insert([
+                'user_id' => $user->id,
+                'word_id' => $sourceId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $response = $this->actingAs($user)->postJson('/api/exercise-runtime/start', [
+            'mode' => 'reading',
+            'source_type' => 'saved',
+            'source_id' => 'library',
+            'language' => 'en',
+            'require_ai' => true,
+            'quality_profile' => 'exam_strict',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('ok', true);
+        $response->assertJsonPath('mode', 'reading');
+
+        $items = $response->json('items');
+        $this->assertIsArray($items);
+        $this->assertGreaterThanOrEqual(2, count($items));
+
+        $this->assertDatabaseHas('ai_generations', [
+            'feature' => 'exercise_runtime_reading',
+            'status' => 'approved',
+        ]);
+    }
+
+    public function test_exercise_runtime_start_uses_stable_fallback_when_ai_required_and_provider_fails(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+        $this->seedLanguages();
+
+        config()->set('services.openai.api_key', 'test-key');
+        config()->set('services.openai.model', 'gpt-4o-mini');
+        config()->set('services.openai.exercise_runtime_enabled', true);
+
+        Http::fake([
+            '*' => Http::response(['error' => 'provider-down'], 500),
+        ]);
+
+        $user = User::factory()->create();
+        $categoryId = DB::table('categories')->insertGetId([
+            'name' => 'Travel',
+            'language_code' => 'en',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $pairs = [
+            ['airport', 'aeropuerto'],
+            ['ticket', 'billete'],
+            ['hotel', 'hotel'],
+            ['station', 'estacion'],
+        ];
+
+        foreach ($pairs as [$sourceText, $targetText]) {
+            $sourceId = DB::table('words')->insertGetId([
+                'client_key' => 'src-fallback-' . $sourceText,
+                'text' => $sourceText,
+                'language_code' => 'en',
+                'category_id' => $categoryId,
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $targetId = DB::table('words')->insertGetId([
+                'client_key' => 'dst-fallback-' . $targetText,
+                'text' => $targetText,
+                'language_code' => 'es',
+                'cefr_level' => 'A1',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('translations')->insert([
+                'source_word_id' => $sourceId,
+                'target_word_id' => $targetId,
+                'created_at' => now(),
+            ]);
+
+            DB::table('user_words')->insert([
+                'user_id' => $user->id,
+                'word_id' => $sourceId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $response = $this->actingAs($user)->postJson('/api/exercise-runtime/start', [
+            'mode' => 'reading',
+            'source_type' => 'saved',
+            'source_id' => 'library',
+            'language' => 'en',
+            'require_ai' => true,
+            'quality_profile' => 'exam_strict',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('ok', true);
+        $response->assertJsonPath('mode', 'reading');
+        $response->assertJsonPath('ai_fallback_used', true);
+
+        $items = $response->json('items');
+        $this->assertIsArray($items);
+        $this->assertNotEmpty($items);
+
+        $this->assertDatabaseHas('ai_generations', [
+            'feature' => 'exercise_runtime_reading',
+            'status' => 'fallback',
+        ]);
+    }
+
     public function test_collection_names_must_be_unique_per_user_and_language(): void
     {
         $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
