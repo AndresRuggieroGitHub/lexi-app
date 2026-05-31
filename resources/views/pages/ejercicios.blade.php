@@ -1216,6 +1216,7 @@
   let autoPlayedListeningIndexes = new Set();
   let currentModeData = null;
   let runtimeRequestToken = 0;
+  let activeListeningStopHandler = null;
 
   function renderExerciseLoading(title) {
     const content = document.getElementById('exerciseContent');
@@ -1680,6 +1681,13 @@
   }
 
   function stopSpeechAudio() {
+    if (typeof activeListeningStopHandler === 'function') {
+      try {
+        activeListeningStopHandler();
+      } catch {
+      }
+    }
+
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -1804,11 +1812,53 @@
     return 'Listen and complete the sentence.';
   }
 
-  function sanitizeListeningQuestion(questionText, answerText) {
+  function sanitizeListeningQuestion(questionText, answerText, baseText = '') {
     const normalizedQuestion = normalizeTextCandidate(questionText);
     const normalizedAnswer = normalizeTextCandidate(answerText);
+    const normalizedBase = normalizeTextCandidate(baseText);
+
+    const simplifyComparableText = (value, answerValue = '') => {
+      let text = String(value || '').trim();
+
+      // If text looks like "instruction: sentence", keep the sentence part.
+      const colonIndex = text.indexOf(':');
+      if (colonIndex > 0) {
+        const afterColon = text.slice(colonIndex + 1).trim();
+        if (afterColon.length >= 8) {
+          text = afterColon;
+        }
+      }
+
+      if (String(answerValue || '').trim() !== '') {
+        const escapedAnswer = String(answerValue).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        text = text.replace(new RegExp(escapedAnswer, 'gi'), ' ');
+      }
+
+      return text
+        .toLowerCase()
+        .replace(/_{2,}/g, ' ')
+        .replace(/\bblank\b/gi, ' ')
+        .replace(/\s*\(.*?\)\s*/g, ' ')
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
 
     if (normalizedQuestion === '') {
+      return tx('listening_question_default', 'Listen and type the missing expression.');
+    }
+
+    const comparableQuestion = simplifyComparableText(normalizedQuestion, normalizedAnswer);
+    const comparableBase = simplifyComparableText(normalizedBase, normalizedAnswer);
+    if (
+      comparableQuestion !== '' &&
+      comparableBase !== '' &&
+      (
+        comparableQuestion === comparableBase ||
+        comparableQuestion.includes(comparableBase) ||
+        comparableBase.includes(comparableQuestion)
+      )
+    ) {
       return tx('listening_question_default', 'Listen and type the missing expression.');
     }
 
@@ -1929,7 +1979,7 @@
   function renderFillin(container, item) {
     const listeningBaseText = resolveListeningBaseText(item);
     const listeningAnswerText = String(item.answer || '').trim();
-    const listeningQuestion = sanitizeListeningQuestion(item.question, listeningAnswerText);
+    const listeningQuestion = sanitizeListeningQuestion(item.question, listeningAnswerText, listeningBaseText);
     const expectedAnswerLength = Math.max(4, String(item.answer || '').trim().length || 4);
     const inputWidthCh = Math.max(8, Math.min(26, expectedAnswerLength + 2));
     const inputHtml = '<input class="ex-input" type="text" autocomplete="off" spellcheck="false" style="width:' + inputWidthCh + 'ch">';
@@ -1993,6 +2043,8 @@
       }
       setAudioPlayingState(false);
     };
+
+    activeListeningStopHandler = stopListeningAudio;
 
     const playListeningAudio = (allowVoiceFallback = true, sessionId = null) => {
       const activeSessionId = sessionId === null ? (playbackSessionId + 1) : sessionId;
@@ -2691,6 +2743,7 @@
   }
 
   function showCompletion() {
+    stopSpeechAudio();
     playUiTone('complete');
     registerExerciseAttempt();
 
@@ -2731,6 +2784,7 @@
     const repeatBtn = document.getElementById('btnRepeatInline');
     if (repeatBtn) {
       repeatBtn.addEventListener('click', () => {
+        stopSpeechAudio();
         currentIndex = 0;
         if (nav) nav.hidden = false;
         renderExercise();
@@ -2740,6 +2794,7 @@
     const backBtn = document.getElementById('btnBackInline');
     if (backBtn) {
       backBtn.addEventListener('click', () => {
+        stopSpeechAudio();
         if (nav) nav.hidden = false;
         document.getElementById('exercisePanel').hidden = true;
         document.getElementById('exerciseMenu').hidden = false;
