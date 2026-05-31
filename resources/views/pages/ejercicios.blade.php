@@ -2014,7 +2014,7 @@
       } else if (success) {
         playUiTone('success');
         feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + tx('matching_success', 'Great speed. Challenge completed.');
-        feedback.className = 'ex-feedback ex-feedback--ok';
+        feedback.className = 'ex-feedback ex-feedback--trophy';
       }
 
       feedback.hidden = false;
@@ -2148,10 +2148,12 @@
       { id: 'b-' + index, pairId: index, text: pair.back },
     ])));
 
-    const mismatchRevealMs = Math.max(1500, Math.min(2200, previewMs + 700));
+    const singleRevealMs = Math.max(1000, Math.min(2200, previewMs));
+    const mismatchRevealMs = Math.max(1400, Math.min(2400, previewMs + 700));
     let activePair = [];
     let resolvingMismatch = false;
     let mismatchTimeout = null;
+    let singleRevealTimeout = null;
     let moves = 0;
     const matchedPairs = new Set();
     const startedAt = Date.now();
@@ -2213,6 +2215,10 @@
         clearTimeout(mismatchTimeout);
         mismatchTimeout = null;
       }
+      if (singleRevealTimeout !== null) {
+        clearTimeout(singleRevealTimeout);
+        singleRevealTimeout = null;
+      }
       renderCards();
     };
 
@@ -2225,7 +2231,7 @@
         playUiTone('success');
       }
       feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + tx('memory_success', 'All pairs completed. Great focus.');
-      feedback.className = 'ex-feedback ex-feedback--ok';
+      feedback.className = 'ex-feedback ex-feedback--trophy';
       feedback.hidden = false;
 
       markExerciseItemResult(container, success, {
@@ -2253,6 +2259,18 @@
 
       if (!activePair.length) {
         activePair = [cardId];
+
+        if (singleRevealTimeout !== null) {
+          clearTimeout(singleRevealTimeout);
+          singleRevealTimeout = null;
+        }
+
+        singleRevealTimeout = window.setTimeout(() => {
+          // Auto-hide a lone revealed card when its time expires.
+          if (activePair.length === 1 && activePair[0] === cardId && !resolvingMismatch) {
+            hideActivePair();
+          }
+        }, singleRevealMs);
         return;
       }
 
@@ -2266,6 +2284,11 @@
       }
 
       activePair.push(cardId);
+
+      if (singleRevealTimeout !== null) {
+        clearTimeout(singleRevealTimeout);
+        singleRevealTimeout = null;
+      }
 
       moves += 1;
       syncMeta();
@@ -2322,7 +2345,7 @@
         '</div>' +
         '<div class="ex-complete-content">' +
           '<h2>' + tx('completed', '¡Seccion completada!') + '</h2>' +
-          '<div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">' +
+          '<div class="ex-complete-actions" style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">' +
             '<button class="btn btn-outline-secondary" id="btnRepeatInline">' + tx('repeat', 'Repetir') + '</button>' +
             '<button class="btn btn-primary" id="btnBackInline">' + tx('choose_other_mode', 'Elegir otro modo') + '</button>' +
           '</div>' +
@@ -2331,8 +2354,11 @@
 
     const completeSection = content.querySelector('.ex-complete-inline');
     if (completeSection) {
-      // GIF does not support CSS loop control; hide layers after one visible cycle.
+      // Show title/buttons only after GIF phase ends.
       window.setTimeout(() => {
+        completeSection.classList.add('is-content-visible');
+
+        // GIF does not support CSS loop control; hide layers after one visible cycle.
         completeSection.querySelectorAll('.ex-complete-bg').forEach(layer => {
           layer.classList.add('is-stopped');
         });

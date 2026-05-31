@@ -1802,6 +1802,18 @@ img {
   color: #664d03;
 }
 
+.ex-feedback--trophy {
+  background: transparent;
+  color: #1f2a44;
+  justify-content: center;
+  padding: 0.35rem 0;
+}
+
+.ex-feedback--trophy i {
+  color: #f0b429;
+  font-size: 1.35rem;
+}
+
 /* Listening */
 .ex-audio-mock {
   display: flex;
@@ -2266,6 +2278,18 @@ img {
   text-align: center;
   width: min(100%, 780px);
   padding: 0.6rem 0.4rem;
+  opacity: 0;
+  transform: translateY(20px);
+  filter: blur(3px);
+  pointer-events: none;
+  transition: opacity 1.15s ease, transform 1.15s cubic-bezier(0.22, 1, 0.36, 1), filter 1s ease;
+}
+
+.ex-complete-inline.is-content-visible .ex-complete-content {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  pointer-events: auto;
 }
 
 .ex-complete-content h2 {
@@ -2273,8 +2297,15 @@ img {
   margin: 0 0 0.95rem;
   color: #142033;
   text-shadow: 0 6px 22px rgba(255, 255, 255, 0.86);
-  opacity: 1;
-  transform: translateY(0);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 1s ease, transform 1s ease;
+}
+
+.ex-complete-actions {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.95s ease, transform 0.95s ease;
 }
 
 .ex-complete-bg {
@@ -2325,8 +2356,16 @@ img {
   animation: ex-complete-cannon-bg-fade 1.15s ease 0.08s both;
 }
 
-.ex-complete-inline.is-visible .ex-complete-content h2 {
-  animation: ex-complete-title-fade 1.05s ease 0.18s both;
+.ex-complete-inline.is-content-visible .ex-complete-content h2 {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.18s;
+}
+
+.ex-complete-inline.is-content-visible .ex-complete-actions {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.42s;
 }
 
 @keyframes ex-complete-title-fade {
