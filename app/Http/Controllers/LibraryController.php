@@ -395,14 +395,14 @@ class LibraryController extends Controller
     {
         $query = Word::query()
             ->with(['category', 'translations.targetWord'])
-            ->where('client_key', 'like', 'seedv4-%')
+            ->where('client_key', 'like', 'seedv%-%')
             ->orderBy('text');
 
         if ($language) {
             $query->where('language_code', $language);
         }
 
-        return $query->limit(250)
+        return $query->limit(500)
             ->get()
             ->map(fn (Word $word) => $this->serializeWord($word, $user))
             ->values()
