@@ -34,7 +34,9 @@ class ExerciseController extends Controller
         $items = $this->buildRuntimeItems($validated['mode'], $sourceItems);
         $title = $this->runtimeTitleForMode($validated['mode'], $validated['source_type']);
 
-        $supportsAiGeneration = in_array($validated['mode'], ['reading', 'listening', 'speaking', 'writing', 'mix'], true);
+        $aiRuntimeEnabled = (bool) config('services.openai.exercise_runtime_enabled', false);
+        $supportsAiGeneration = $aiRuntimeEnabled
+            && in_array($validated['mode'], ['reading', 'listening', 'speaking', 'writing', 'mix'], true);
         $aiResult = $supportsAiGeneration
             ? app(AiExerciseGenerator::class)->generate(
                 $validated['mode'],

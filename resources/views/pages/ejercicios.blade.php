@@ -54,18 +54,6 @@
         <p class="exercise-card-label">{{ __('lexi.exercises.writing_label') }}</p>
         <span class="exercise-card-badge">{{ __('lexi.exercises.writing_label') }}</span>
       </article>
-      <article class="exercise-card" data-mode="flashcards" role="button" tabindex="0" aria-label="{{ __('lexi.exercises.card_flashcards_aria') }}" style="--card-color:#14b8a6">
-        <div class="exercise-card-icon"><i class="bi bi-layers-fill"></i></div>
-        <img src="images/mix_small.webp" srcset="images/mix_small.webp 300w, images/mix_medium.webp 600w, images/mix_large.webp 900w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 20vw" loading="lazy" alt="{{ __('lexi.exercises.flashcards_image_alt') }}">
-        <p class="exercise-card-label">{{ __('lexi.exercises.flashcards_label') }}</p>
-        <span class="exercise-card-badge">{{ __('lexi.exercises.flashcards_label') }}</span>
-      </article>
-      <article class="exercise-card" data-mode="matching" role="button" tabindex="0" aria-label="{{ __('lexi.exercises.card_matching_aria') }}" style="--card-color:#ef4444">
-        <div class="exercise-card-icon"><i class="bi bi-bezier2"></i></div>
-        <img src="images/mix_small.webp" srcset="images/mix_small.webp 300w, images/mix_medium.webp 600w, images/mix_large.webp 900w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 20vw" loading="lazy" alt="{{ __('lexi.exercises.matching_image_alt') }}">
-        <p class="exercise-card-label">{{ __('lexi.exercises.matching_label') }}</p>
-        <span class="exercise-card-badge">{{ __('lexi.exercises.matching_label') }}</span>
-      </article>
       <article class="exercise-card" data-mode="mix" role="button" tabindex="0" aria-label="{{ __('lexi.exercises.card_mix_aria') }}" style="--card-color:#f9b233">
         <div class="exercise-card-icon"><i class="bi bi-shuffle"></i></div>
         <img src="images/mix_small.webp" srcset="images/mix_small.webp 300w, images/mix_medium.webp 600w, images/mix_large.webp 900w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 20vw" loading="lazy" alt="{{ __('lexi.exercises.mix_image_alt') }}">
@@ -140,21 +128,21 @@
   const SHARED_CEFR_LEVELS = Array.isArray(sharedConfig.cefr_levels) ? sharedConfig.cefr_levels : [];
   const SHARED_TOPIC_OPTIONS = Array.isArray(sharedConfig.topic_options) ? sharedConfig.topic_options : [];
   const SKILL_LABELS = {
-    en: ['Reading', 'Listening', 'Speaking', 'Writing', 'Flashcards', 'Matching', 'Challenge'],
-    fr: ['Lecture', 'Écoute', 'Expression', 'Écriture', 'Flashcards', 'Matching', 'Challenge'],
-    de: ['Lesen', 'Hören', 'Sprechen', 'Schreiben', 'Flashcards', 'Matching', 'Challenge'],
-    it: ['Lettura', 'Ascolto', 'Parlare', 'Scrittura', 'Flashcards', 'Matching', 'Challenge'],
-    no: ['Lesing', 'Lytting', 'Snakking', 'Skriving', 'Flashcards', 'Matching', 'Challenge'],
-    dk: ['Læsning', 'Lytning', 'Tale', 'Skrivning', 'Flashcards', 'Matching', 'Challenge'],
-    fi: ['Lukeminen', 'Kuuntelu', 'Puhuminen', 'Kirjoitus', 'Flashcards', 'Matching', 'Challenge'],
-    ko: ['읽기', '듣기', '말하기', '쓰기', '플래시카드', '매칭', '챌린지'],
-    zh: ['阅读', '听力', '口语', '写作', '闪卡', '连线匹配', '挑战'],
-    ru: ['Чтение', 'Слушание', 'Говорение', 'Письмо', 'Карточки', 'Связи', 'Челлендж'],
-    ua: ['Читання', 'Слухання', 'Говоріння', 'Письмо', 'Картки', 'Поєднання', 'Виклик'],
-    gr: ['Ανάγνωση', 'Ακρόαση', 'Ομιλία', 'Γραφή', 'Flashcards', 'Matching', 'Challenge'],
-    es: ['Lectura', 'Escucha', 'Habla', 'Escritura', 'Tarjetas', 'Conectar', 'Desafio'],
+    en: ['Reading', 'Listening', 'Speaking', 'Writing', 'Challenge'],
+    fr: ['Lecture', 'Écoute', 'Expression', 'Écriture', 'Challenge'],
+    de: ['Lesen', 'Hören', 'Sprechen', 'Schreiben', 'Challenge'],
+    it: ['Lettura', 'Ascolto', 'Parlare', 'Scrittura', 'Challenge'],
+    no: ['Lesing', 'Lytting', 'Snakking', 'Skriving', 'Challenge'],
+    dk: ['Læsning', 'Lytning', 'Tale', 'Skrivning', 'Challenge'],
+    fi: ['Lukeminen', 'Kuuntelu', 'Puhuminen', 'Kirjoitus', 'Challenge'],
+    ko: ['읽기', '듣기', '말하기', '쓰기', '챌린지'],
+    zh: ['阅读', '听力', '口语', '写作', '挑战'],
+    ru: ['Чтение', 'Слушание', 'Говорение', 'Письмо', 'Челлендж'],
+    ua: ['Читання', 'Слухання', 'Говоріння', 'Письмо', 'Виклик'],
+    gr: ['Ανάγνωση', 'Ακρόαση', 'Ομιλία', 'Γραφή', 'Challenge'],
+    es: ['Lectura', 'Escucha', 'Habla', 'Escritura', 'Desafio'],
   };
-  const BADGE_MODES = ['reading', 'listening', 'speaking', 'writing', 'flashcards', 'matching', 'mix'];
+  const BADGE_MODES = ['reading', 'listening', 'speaking', 'writing', 'mix'];
   const EXERCISE_SOURCE_KEY = 'lexiExerciseSource';
   const EXERCISE_COLLECTION_KEY = 'lexiExerciseCollection';
   const EXERCISE_CATALOG_LEVEL_KEY = 'lexiExerciseCatalogLevel';
@@ -891,7 +879,7 @@
       ]
     },
     mix: {
-      title: "Combinado",
+      title: tx('challenge_label', 'Desafio'),
       items: [
         {
           type: "mcq",
@@ -925,6 +913,7 @@
   let sessionCorrectItems = 0;
   let sessionAnswerRecords = [];
   let currentModeData = null;
+  let runtimeRequestToken = 0;
 
   function resetExerciseSessionMetrics() {
     sessionStartedAt = Date.now();
@@ -1029,15 +1018,6 @@
     resetExerciseSessionMetrics();
     currentModeData = getModeData(mode);
 
-    try {
-      const runtimeData = await fetchRuntimeModeData(mode);
-
-      if (runtimeData && Array.isArray(runtimeData.items) && runtimeData.items.length) {
-        currentModeData = runtimeData;
-      }
-    } catch {
-    }
-
     const modeData = currentModeData;
     document.getElementById('exerciseMenu').hidden = true;
     document.getElementById('exercisePanel').hidden = false;
@@ -1045,6 +1025,23 @@
     document.getElementById('exPanelTitle').textContent = modeData.title;
     renderExercise();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    const token = ++runtimeRequestToken;
+
+    try {
+      const runtimeData = await fetchRuntimeModeData(mode);
+
+      if (token !== runtimeRequestToken || currentMode !== mode) {
+        return;
+      }
+
+      if (runtimeData && Array.isArray(runtimeData.items) && runtimeData.items.length) {
+        currentModeData = runtimeData;
+        currentIndex = 0;
+        renderExercise();
+      }
+    } catch {
+    }
   }
 
   function closePanel() {

@@ -39,6 +39,7 @@ return [
         'api_key' => env('OPENAI_API_KEY'),
         'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        'exercise_runtime_enabled' => env('OPENAI_EXERCISE_RUNTIME_ENABLED', false),
         'http_referer' => env('OPENAI_HTTP_REFERER'),
         'app_title' => env('OPENAI_APP_TITLE', env('APP_NAME', 'Lexi')),
         'default_token_rates' => [

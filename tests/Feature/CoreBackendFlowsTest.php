@@ -1150,6 +1150,7 @@ PHP);
 
         config()->set('services.openai.api_key', 'test-key');
         config()->set('services.openai.model', 'gpt-4o-mini');
+        config()->set('services.openai.exercise_runtime_enabled', true);
 
         Http::fake([
             '*' => Http::response([
