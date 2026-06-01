@@ -141,128 +141,137 @@
     return String(document.documentElement.lang || 'en').toLowerCase().split('-')[0];
   };
   const isNonEnglishUiLocale = () => getUiLocale() !== 'en';
-  const UI_RUNTIME_FALLBACKS = {
-    en: {
-      loading_exercise: 'Preparing exercises...',
-      loading_options: 'Loading options...',
-      loading_saved_lists: 'Loading your lists...',
-      loading_catalog: 'Loading catalog...',
-      all_levels: 'All levels',
-      all_categories: 'All categories',
-      all_collections: 'All collections',
-      catalog_name: 'Catalog',
-      saved_name: 'Saved list',
-      saved_lists_name: 'Your lists',
-      listening_question_default: 'Listen and type the missing expression.',
-      translate_to_english: 'Translate to English.',
-      write_placeholder: 'Write your translation here...',
-      matching_question: 'Match each word with the correct translation.',
-      memory_question: 'Find all translation pairs with the fewest moves.',
-      matching_label: 'Matching',
-      memory_label: 'Memory',
-      check: 'Check',
-      speaking_time: 'Time',
-      speaking_listening: 'Listening...',
-      speaking_transcript_label: 'Transcript',
-      speaking_not_supported: 'Voice transcription is not available in this browser.',
-      speaking_no_speech: 'No speech was detected. Try again.',
-      pairs_label: 'Pairs',
-      moves_label: 'Moves',
-      matching_timeout: 'Time is over. Try again to beat the clock.',
-      matching_success: 'Great speed. Challenge completed.',
-      memory_success: 'All pairs completed. Great focus.',
-    },
-    es: {
-      loading_exercise: 'Preparando ejercicios...',
-      loading_options: 'Cargando opciones...',
-      loading_saved_lists: 'Cargando tus listas...',
-      loading_catalog: 'Cargando catalogo...',
-      all_levels: 'Todos los niveles',
-      all_categories: 'Todas las categorias',
-      all_collections: 'Todas las listas',
-      catalog_name: 'Catalogo',
-      saved_name: 'Lista guardada',
-      saved_lists_name: 'Tus listas',
-      listening_question_default: 'Escucha y escribe la expresion que falta.',
-      translate_to_english: 'Traduce al ingles.',
-      write_placeholder: 'Escribe tu traduccion aqui...',
-      matching_question: 'Conecta cada palabra con su traduccion correcta.',
-      memory_question: 'Encuentra todas las parejas de traduccion con el menor numero de movimientos.',
-      matching_label: 'Conectar columnas',
-      memory_label: 'Memoria',
-      check: 'Comprobar',
-      speaking_time: 'Tiempo',
-      speaking_listening: 'Escuchando...',
-      speaking_transcript_label: 'Transcripcion',
-      speaking_not_supported: 'La transcripcion de voz no esta disponible en este navegador.',
-      speaking_no_speech: 'No se detecto voz. Intentalo de nuevo.',
-      pairs_label: 'Parejas',
-      moves_label: 'Movimientos',
-      matching_timeout: 'Se acabo el tiempo. Intentalo de nuevo.',
-      matching_success: 'Gran velocidad. Desafio completado.',
-      memory_success: 'Todas las parejas completadas. Gran concentracion.',
-    },
-    fr: {
-      loading_exercise: 'Preparation des exercices...',
-      loading_options: 'Chargement des options...',
-      loading_saved_lists: 'Chargement de tes listes...',
-      loading_catalog: 'Chargement du catalogue...',
-      all_levels: 'Tous les niveaux',
-      all_categories: 'Toutes les categories',
-      all_collections: 'Toutes les listes',
-      catalog_name: 'Catalogue',
-      saved_name: 'Liste enregistree',
-      saved_lists_name: 'Tes listes',
-      listening_question_default: 'Ecoute et ecris lexpression manquante.',
-      translate_to_english: 'Traduis en anglais.',
-      write_placeholder: 'Ecris ta traduction ici...',
-      matching_question: 'Associe chaque mot a la bonne traduction.',
-      memory_question: 'Trouve toutes les paires de traduction avec le moins de mouvements.',
-      matching_label: 'Correspondance',
-      memory_label: 'Memoire',
-      check: 'Verifier',
-      speaking_time: 'Temps',
-      speaking_listening: 'Ecoute en cours...',
-      speaking_transcript_label: 'Transcription',
-      speaking_not_supported: 'La transcription vocale nest pas disponible dans ce navigateur.',
-      speaking_no_speech: 'Aucune voix detectee. Reessaie.',
-      pairs_label: 'Paires',
-      moves_label: 'Mouvements',
-      matching_timeout: 'Le temps est ecoule. Reessaie.',
-      matching_success: 'Excellente vitesse. Defi reussi.',
-      memory_success: 'Toutes les paires sont completees. Excellent focus.',
-    },
-    de: {
-      loading_exercise: 'Ubungen werden vorbereitet...',
-      loading_options: 'Optionen werden geladen...',
-      loading_saved_lists: 'Deine Listen werden geladen...',
-      loading_catalog: 'Katalog wird geladen...',
-      all_levels: 'Alle Niveaus',
-      all_categories: 'Alle Kategorien',
-      all_collections: 'Alle Listen',
-      catalog_name: 'Katalog',
-      saved_name: 'Gespeicherte Liste',
-      saved_lists_name: 'Deine Listen',
-      listening_question_default: 'Hore zu und schreibe den fehlenden Ausdruck.',
-      translate_to_english: 'Ubersetze ins Englische.',
-      write_placeholder: 'Schreibe deine Ubersetzung hier...',
-      matching_question: 'Ordne jedes Wort der richtigen Ubersetzung zu.',
-      memory_question: 'Finde alle Ubersetzungspaare mit moglichst wenigen Zugen.',
-      matching_label: 'Zuordnen',
-      memory_label: 'Memory',
-      check: 'Prufen',
-      speaking_time: 'Zeit',
-      speaking_listening: 'Aufnahme lauft...',
-      speaking_transcript_label: 'Transkript',
-      speaking_not_supported: 'Spracherkennung ist in diesem Browser nicht verfugbar.',
-      speaking_no_speech: 'Keine Sprache erkannt. Bitte erneut versuchen.',
-      pairs_label: 'Paare',
-      moves_label: 'Zuge',
-      matching_timeout: 'Die Zeit ist abgelaufen. Versuche es erneut.',
-      matching_success: 'Starkes Tempo. Herausforderung geschafft.',
-      memory_success: 'Alle Paare gefunden. Sehr gut.',
-    },
-  };
+  const UI_RUNTIME_FALLBACKS = @json((function () {
+    $fallbacks = [
+        'en' => [
+            'loading_exercise' => 'Preparing exercises...',
+            'loading_options' => 'Loading options...',
+            'loading_saved_lists' => 'Loading your lists...',
+            'loading_catalog' => 'Loading catalog...',
+            'all_levels' => 'All levels',
+            'all_categories' => 'All categories',
+            'all_collections' => 'All collections',
+            'catalog_name' => 'Catalog',
+            'saved_name' => 'Saved list',
+            'saved_lists_name' => 'Your lists',
+            'listening_question_default' => 'Listen and type the missing expression.',
+            'translate_to_english' => 'Translate to English.',
+            'write_placeholder' => 'Write your translation here...',
+            'matching_question' => 'Match each word with the correct translation.',
+            'memory_question' => 'Find all translation pairs with the fewest moves.',
+            'matching_label' => 'Matching',
+            'memory_label' => 'Memory',
+            'check' => 'Check',
+            'speaking_time' => 'Time',
+            'speaking_listening' => 'Listening...',
+            'speaking_transcript_label' => 'Transcript',
+            'speaking_not_supported' => 'Voice transcription is not available in this browser.',
+            'speaking_no_speech' => 'No speech was detected. Try again.',
+            'pairs_label' => 'Pairs',
+            'moves_label' => 'Moves',
+            'matching_timeout' => 'Time is over. Try again to beat the clock.',
+            'matching_success' => 'Great speed. Challenge completed.',
+            'memory_success' => 'All pairs completed. Great focus.',
+        ],
+        'es' => [
+            'loading_exercise' => 'Preparando ejercicios...',
+            'loading_options' => 'Cargando opciones...',
+            'loading_saved_lists' => 'Cargando tus listas...',
+            'loading_catalog' => 'Cargando catalogo...',
+            'all_levels' => 'Todos los niveles',
+            'all_categories' => 'Todas las categorias',
+            'all_collections' => 'Todas las listas',
+            'catalog_name' => 'Catalogo',
+            'saved_name' => 'Lista guardada',
+            'saved_lists_name' => 'Tus listas',
+            'listening_question_default' => 'Escucha y escribe la expresion que falta.',
+            'translate_to_english' => 'Traduce al ingles.',
+            'write_placeholder' => 'Escribe tu traduccion aqui...',
+            'matching_question' => 'Conecta cada palabra con su traduccion correcta.',
+            'memory_question' => 'Encuentra todas las parejas de traduccion con el menor numero de movimientos.',
+            'matching_label' => 'Conectar columnas',
+            'memory_label' => 'Memoria',
+            'check' => 'Comprobar',
+            'speaking_time' => 'Tiempo',
+            'speaking_listening' => 'Escuchando...',
+            'speaking_transcript_label' => 'Transcripcion',
+            'speaking_not_supported' => 'La transcripcion de voz no esta disponible en este navegador.',
+            'speaking_no_speech' => 'No se detecto voz. Intentalo de nuevo.',
+            'pairs_label' => 'Parejas',
+            'moves_label' => 'Movimientos',
+            'matching_timeout' => 'Se acabo el tiempo. Intentalo de nuevo.',
+            'matching_success' => 'Gran velocidad. Desafio completado.',
+            'memory_success' => 'Todas las parejas completadas. Gran concentracion.',
+        ],
+        'fr' => [
+            'loading_exercise' => 'Preparation des exercices...',
+            'loading_options' => 'Chargement des options...',
+            'loading_saved_lists' => 'Chargement de tes listes...',
+            'loading_catalog' => 'Chargement du catalogue...',
+            'all_levels' => 'Tous les niveaux',
+            'all_categories' => 'Toutes les categories',
+            'all_collections' => 'Toutes les listes',
+            'catalog_name' => 'Catalogue',
+            'saved_name' => 'Liste enregistree',
+            'saved_lists_name' => 'Tes listes',
+            'listening_question_default' => 'Ecoute et ecris lexpression manquante.',
+            'translate_to_english' => 'Traduis en anglais.',
+            'write_placeholder' => 'Ecris ta traduction ici...',
+            'matching_question' => 'Associe chaque mot a la bonne traduction.',
+            'memory_question' => 'Trouve toutes les paires de traduction avec le moins de mouvements.',
+            'matching_label' => 'Correspondance',
+            'memory_label' => 'Memoire',
+            'check' => 'Verifier',
+            'speaking_time' => 'Temps',
+            'speaking_listening' => 'Ecoute en cours...',
+            'speaking_transcript_label' => 'Transcription',
+            'speaking_not_supported' => 'La transcription vocale nest pas disponible dans ce navigateur.',
+            'speaking_no_speech' => 'Aucune voix detectee. Reessaie.',
+            'pairs_label' => 'Paires',
+            'moves_label' => 'Mouvements',
+            'matching_timeout' => 'Le temps est ecoule. Reessaie.',
+            'matching_success' => 'Excellente vitesse. Defi reussi.',
+            'memory_success' => 'Toutes les paires sont completees. Excellent focus.',
+        ],
+        'de' => [
+            'loading_exercise' => 'Ubungen werden vorbereitet...',
+            'loading_options' => 'Optionen werden geladen...',
+            'loading_saved_lists' => 'Deine Listen werden geladen...',
+            'loading_catalog' => 'Katalog wird geladen...',
+            'all_levels' => 'Alle Niveaus',
+            'all_categories' => 'Alle Kategorien',
+            'all_collections' => 'Alle Listen',
+            'catalog_name' => 'Katalog',
+            'saved_name' => 'Gespeicherte Liste',
+            'saved_lists_name' => 'Deine Listen',
+            'listening_question_default' => 'Hore zu und schreibe den fehlenden Ausdruck.',
+            'translate_to_english' => 'Ubersetze ins Englische.',
+            'write_placeholder' => 'Schreibe deine Ubersetzung hier...',
+            'matching_question' => 'Ordne jedes Wort der richtigen Ubersetzung zu.',
+            'memory_question' => 'Finde alle Ubersetzungspaare mit moglichst wenigen Zugen.',
+            'matching_label' => 'Zuordnen',
+            'memory_label' => 'Memory',
+            'check' => 'Prufen',
+            'speaking_time' => 'Zeit',
+            'speaking_listening' => 'Aufnahme lauft...',
+            'speaking_transcript_label' => 'Transkript',
+            'speaking_not_supported' => 'Spracherkennung ist in diesem Browser nicht verfugbar.',
+            'speaking_no_speech' => 'Keine Sprache erkannt. Bitte erneut versuchen.',
+            'pairs_label' => 'Paare',
+            'moves_label' => 'Zuge',
+            'matching_timeout' => 'Die Zeit ist abgelaufen. Versuche es erneut.',
+            'matching_success' => 'Starkes Tempo. Herausforderung geschafft.',
+            'memory_success' => 'Alle Paare gefunden. Sehr gut.',
+        ],
+    ];
+
+    $activeLocale = strtolower((string) app()->getLocale());
+
+    return [
+        'en' => $fallbacks['en'],
+        $activeLocale => $fallbacks[$activeLocale] ?? $fallbacks['en'],
+    ];
+})());
   const uiFallback = (key, fallback = '') => {
     const locale = getUiLocale();
     const table = UI_RUNTIME_FALLBACKS[locale] || UI_RUNTIME_FALLBACKS.en;
@@ -2811,6 +2820,14 @@
     let shouldEvaluateOnStop = true;
     let finalTranscript = '';
     let interimTranscript = '';
+    let recognitionSessionId = 0;
+    let manualStopRequested = false;
+    let captureState = 'idle';
+    let hardStopTimerId = null;
+    let speechDetected = false;
+    let microphoneStream = null;
+    const MAX_RECORDING_MS = 4000;
+    const INITIAL_SPEECH_TIMEOUT_MS = 4500;
 
     const formatDuration = (seconds) => {
       const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
@@ -2838,19 +2855,73 @@
       }, 1000);
     };
 
-    const setRecordingState = (recording) => {
-      isRecording = recording;
-      if (micBtn) micBtn.classList.toggle('recording', recording);
-      if (micIcon) micIcon.className = recording ? 'bi bi-stop-fill' : 'bi bi-mic';
+    const clearSpeakingAutoStopTimers = () => {
+      if (hardStopTimerId !== null) {
+        clearTimeout(hardStopTimerId);
+        hardStopTimerId = null;
+      }
+    };
+
+    const releaseMicrophoneStream = () => {
+      if (!microphoneStream) return;
+      try {
+        microphoneStream.getTracks().forEach(track => track.stop());
+      } catch {
+      }
+      microphoneStream = null;
+    };
+
+    const ensureMicrophoneStream = async () => {
+      if (microphoneStream && microphoneStream.active) {
+        return microphoneStream;
+      }
+
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        throw new Error('microphone-unavailable');
+      }
+
+      microphoneStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      return microphoneStream;
+    };
+
+    const prepareMicrophonePermission = async () => {
+      await ensureMicrophoneStream();
+      releaseMicrophoneStream();
+    };
+
+    const setCaptureState = (nextState) => {
+      captureState = nextState;
+      const active = nextState === 'starting' || nextState === 'recording' || nextState === 'stopping';
+      isRecording = nextState === 'recording';
+
+      if (micBtn) {
+        micBtn.classList.toggle('recording', active);
+        micBtn.disabled = nextState === 'stopping';
+      }
+
+      if (micIcon) {
+        micIcon.className = active ? 'bi bi-stop-fill' : 'bi bi-mic';
+      }
+
       if (status) {
-        status.hidden = !recording;
-        status.textContent = recording ? listeningLabel : '';
+        status.hidden = !active;
+        status.textContent = active ? listeningLabel : '';
       }
     };
 
     const resetSpeakingOutput = () => {
+      clearSpeakingAutoStopTimers();
       finalTranscript = '';
       interimTranscript = '';
+      speechDetected = false;
       resetTimer();
       if (feedback) {
         feedback.hidden = true;
@@ -2920,24 +2991,41 @@
 
     const stopSpeakingCapture = (evaluateAfterStop = false) => {
       stopTimer();
+      clearSpeakingAutoStopTimers();
       shouldEvaluateOnStop = evaluateAfterStop;
 
-      if (recognition && isRecording) {
+      if (recognition && captureState !== 'idle') {
+        manualStopRequested = true;
+        const shouldAbort = captureState === 'starting';
+        setCaptureState('stopping');
         try {
-          recognition.stop();
+          if (shouldAbort) {
+            recognition.abort();
+          } else {
+            recognition.stop();
+          }
         } catch {
-          setRecordingState(false);
+          recognition = null;
+          recognitionSessionId = 0;
+          manualStopRequested = false;
+          setCaptureState('idle');
+          releaseMicrophoneStream();
         }
         return;
       }
 
-      setRecordingState(false);
+      setCaptureState('idle');
+      releaseMicrophoneStream();
       if (evaluateAfterStop) {
         evaluateSpeakingAttempt();
       }
     };
 
-    const startSpeakingCapture = () => {
+    const startSpeakingCapture = async () => {
+      if (recognition || captureState !== 'idle') {
+        return;
+      }
+
       resetSpeakingOutput();
 
       if (!SpeechRecognition) {
@@ -2950,24 +3038,59 @@
         return;
       }
 
+      setCaptureState('starting');
+
+      try {
+        await prepareMicrophonePermission();
+      } catch {
+        setCaptureState('idle');
+        if (feedback) {
+          feedback.className = 'ex-feedback ex-feedback--warn';
+          feedback.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + sanitizeRuntimeText(tx('microphone_permission_required', 'Microphone permission is required to record.'));
+          feedback.hidden = false;
+        }
+        return;
+      }
+
+      if (captureState !== 'starting') {
+        return;
+      }
+
       recognition = new SpeechRecognition();
+      const sessionId = recognitionSessionId + 1;
+      recognitionSessionId = sessionId;
+      manualStopRequested = false;
+      speechDetected = false;
       recognition.lang = resolveSpeechRecognitionLocale(getActiveLang());
       recognition.continuous = false;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
+        if (sessionId !== recognitionSessionId) return;
         shouldEvaluateOnStop = true;
-        setRecordingState(true);
+        setCaptureState('recording');
         startTimer();
+        clearSpeakingAutoStopTimers();
+        hardStopTimerId = window.setTimeout(() => {
+          hardStopTimerId = null;
+          stopSpeakingCapture(true);
+        }, MAX_RECORDING_MS);
+        window.setTimeout(() => {
+          if (sessionId !== recognitionSessionId || speechDetected || !recognition || captureState === 'stopping') return;
+          stopSpeakingCapture(true);
+        }, INITIAL_SPEECH_TIMEOUT_MS);
       };
 
       recognition.onresult = (event) => {
+        if (sessionId !== recognitionSessionId) return;
         interimTranscript = '';
 
         for (let index = event.resultIndex; index < event.results.length; index += 1) {
           const segment = String(event.results[index][0]?.transcript || '').trim();
           if (!segment) continue;
+
+          speechDetected = true;
 
           if (event.results[index].isFinal) {
             finalTranscript = (finalTranscript + ' ' + segment).trim();
@@ -2980,16 +3103,49 @@
       };
 
       recognition.onerror = (event) => {
+        if (sessionId !== recognitionSessionId) return;
+
         stopTimer();
-        shouldEvaluateOnStop = false;
-        setRecordingState(false);
+        clearSpeakingAutoStopTimers();
 
         const code = String(event?.error || '').toLowerCase();
+        if (code === 'aborted' && manualStopRequested) {
+          recognition = null;
+          recognitionSessionId = 0;
+          manualStopRequested = false;
+          setCaptureState('idle');
+          releaseMicrophoneStream();
+          return;
+        }
+
         const permissionDenied = code === 'not-allowed' || code === 'service-not-allowed';
         const noMatch = code === 'no-speech' || code === 'nomatch';
+        const networkError = code === 'network';
+        const audioCapture = code === 'audio-capture';
+        const aborted = code === 'aborted';
+        const langUnsupported = code === 'language-not-supported';
+
+        if ((networkError || noMatch) && (finalTranscript || interimTranscript || speechDetected)) {
+          shouldEvaluateOnStop = true;
+          setCaptureState('idle');
+          releaseMicrophoneStream();
+          return;
+        }
+
+        shouldEvaluateOnStop = false;
+        setCaptureState('idle');
+        recognition = null;
+        recognitionSessionId = 0;
+        manualStopRequested = false;
+        releaseMicrophoneStream();
+
         const message = permissionDenied
           ? tx('microphone_permission_required', 'Microphone permission is required to record.')
-          : (noMatch ? noSpeechText : tx('recording_failed', 'Recording failed. Try again.'));
+          : (langUnsupported
+            ? unsupportedText
+            : ((noMatch || networkError || audioCapture || aborted)
+            ? noSpeechText
+            : tx('recording_failed', 'Recording failed. Try again.')));
 
         if (feedback) {
           feedback.className = 'ex-feedback ex-feedback--warn';
@@ -2999,20 +3155,29 @@
       };
 
       recognition.onend = () => {
-        stopTimer();
-        setRecordingState(false);
+        if (sessionId !== recognitionSessionId) return;
 
-        if (shouldEvaluateOnStop) {
+        stopTimer();
+        clearSpeakingAutoStopTimers();
+        setCaptureState('idle');
+        recognition = null;
+        recognitionSessionId = 0;
+        const shouldEvaluate = shouldEvaluateOnStop;
+        manualStopRequested = false;
+        releaseMicrophoneStream();
+
+        if (shouldEvaluate) {
           evaluateSpeakingAttempt();
         }
-
-        recognition = null;
       };
 
       try {
         recognition.start();
       } catch {
         recognition = null;
+        recognitionSessionId = 0;
+        setCaptureState('idle');
+        releaseMicrophoneStream();
         if (feedback) {
           feedback.className = 'ex-feedback ex-feedback--warn';
           feedback.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + unsupportedText;
@@ -3022,17 +3187,20 @@
     };
 
     micBtn.addEventListener('click', function () {
-      if (isRecording) {
+      if (captureState !== 'idle') {
         playUiTone('neutral');
         stopSpeakingCapture(true);
         return;
       }
 
       playUiTone('neutral');
-      startSpeakingCapture();
+      void startSpeakingCapture();
     });
 
-    activeListeningStopHandler = () => stopSpeakingCapture(false);
+    activeListeningStopHandler = () => {
+      stopSpeakingCapture(false);
+      releaseMicrophoneStream();
+    };
   }
 
   function renderTranslate(container, item) {

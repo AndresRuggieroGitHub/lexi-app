@@ -491,7 +491,7 @@ PHP);
         $response->assertSee('Lexi Admin');
         $response->assertSee('Panel de control');
         $response->assertSee('Abrir app');
-        $response->assertSee('Cerrar sesion');
+        $response->assertSee('Cerrar sesión');
         $response->assertSee(route('admin-users'), false);
         $response->assertSee(route('admin-plan-features'), false);
     }
