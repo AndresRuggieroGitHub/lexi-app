@@ -160,6 +160,12 @@
       memory_question: 'Find all translation pairs with the fewest moves.',
       matching_label: 'Matching',
       memory_label: 'Memory',
+      check: 'Check',
+      speaking_time: 'Time',
+      speaking_listening: 'Listening...',
+      speaking_transcript_label: 'Transcript',
+      speaking_not_supported: 'Voice transcription is not available in this browser.',
+      speaking_no_speech: 'No speech was detected. Try again.',
       pairs_label: 'Pairs',
       moves_label: 'Moves',
       matching_timeout: 'Time is over. Try again to beat the clock.',
@@ -184,6 +190,12 @@
       memory_question: 'Encuentra todas las parejas de traduccion con el menor numero de movimientos.',
       matching_label: 'Conectar columnas',
       memory_label: 'Memoria',
+      check: 'Comprobar',
+      speaking_time: 'Tiempo',
+      speaking_listening: 'Escuchando...',
+      speaking_transcript_label: 'Transcripcion',
+      speaking_not_supported: 'La transcripcion de voz no esta disponible en este navegador.',
+      speaking_no_speech: 'No se detecto voz. Intentalo de nuevo.',
       pairs_label: 'Parejas',
       moves_label: 'Movimientos',
       matching_timeout: 'Se acabo el tiempo. Intentalo de nuevo.',
@@ -208,6 +220,12 @@
       memory_question: 'Trouve toutes les paires de traduction avec le moins de mouvements.',
       matching_label: 'Correspondance',
       memory_label: 'Memoire',
+      check: 'Verifier',
+      speaking_time: 'Temps',
+      speaking_listening: 'Ecoute en cours...',
+      speaking_transcript_label: 'Transcription',
+      speaking_not_supported: 'La transcription vocale nest pas disponible dans ce navigateur.',
+      speaking_no_speech: 'Aucune voix detectee. Reessaie.',
       pairs_label: 'Paires',
       moves_label: 'Mouvements',
       matching_timeout: 'Le temps est ecoule. Reessaie.',
@@ -232,6 +250,12 @@
       memory_question: 'Finde alle Ubersetzungspaare mit moglichst wenigen Zugen.',
       matching_label: 'Zuordnen',
       memory_label: 'Memory',
+      check: 'Prufen',
+      speaking_time: 'Zeit',
+      speaking_listening: 'Aufnahme lauft...',
+      speaking_transcript_label: 'Transkript',
+      speaking_not_supported: 'Spracherkennung ist in diesem Browser nicht verfugbar.',
+      speaking_no_speech: 'Keine Sprache erkannt. Bitte erneut versuchen.',
       pairs_label: 'Paare',
       moves_label: 'Zuge',
       matching_timeout: 'Die Zeit ist abgelaufen. Versuche es erneut.',
@@ -2068,6 +2092,72 @@
     return aliases[base] || base || 'en';
   }
 
+  function resolveSpeechRecognitionLocale(langCode) {
+    const base = normalizeLangCodeForSpeech(langCode);
+    const map = {
+      en: 'en-US',
+      es: 'es-ES',
+      fr: 'fr-FR',
+      de: 'de-DE',
+      it: 'it-IT',
+      pt: 'pt-PT',
+      nl: 'nl-NL',
+      sv: 'sv-SE',
+      da: 'da-DK',
+      nb: 'nb-NO',
+      fi: 'fi-FI',
+      pl: 'pl-PL',
+      cs: 'cs-CZ',
+      sk: 'sk-SK',
+      hu: 'hu-HU',
+      ro: 'ro-RO',
+      el: 'el-GR',
+      tr: 'tr-TR',
+      uk: 'uk-UA',
+      ru: 'ru-RU',
+      ar: 'ar-SA',
+      he: 'he-IL',
+      hi: 'hi-IN',
+      id: 'id-ID',
+      vi: 'vi-VN',
+      th: 'th-TH',
+      ja: 'ja-JP',
+      ko: 'ko-KR',
+      zh: 'zh-CN',
+    };
+
+    return map[base] || `${base}-${base.toUpperCase()}`;
+  }
+
+  function normalizeSpeechComparisonText(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function computeSpeechMatchScore(spokenText, expectedText) {
+    const spoken = normalizeSpeechComparisonText(spokenText);
+    const expected = normalizeSpeechComparisonText(expectedText);
+
+    if (!spoken || !expected) return 0;
+    if (spoken === expected) return 1;
+    if (spoken.includes(expected)) return 0.95;
+    if (expected.includes(spoken)) return 0.85;
+
+    const spokenTokens = spoken.split(' ').filter(Boolean);
+    const expectedTokens = expected.split(' ').filter(Boolean);
+    if (!spokenTokens.length || !expectedTokens.length) return 0;
+
+    const expectedSet = new Set(expectedTokens);
+    const overlap = spokenTokens.filter(token => expectedSet.has(token)).length;
+
+    return overlap / expectedTokens.length;
+  }
+
   function resolveSpeechVoice(langCode) {
     if (!('speechSynthesis' in window)) return null;
 
@@ -2527,6 +2617,7 @@
     const inputWidthCh = Math.max(6, Math.min(34, expectedAnswerLength + 2));
     const inputHtml = '<input class="ex-input" type="text" autocomplete="off" spellcheck="false" style="width:' + inputWidthCh + 'ch">';
     const sentenceWithInput = buildListeningSentenceWithGap(listeningSentenceText, listeningAnswerText, inputHtml);
+    const checkLabel = resolveExerciseRuntimeTextRelaxed('check', uiFallback('check', 'Check'));
 
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-headphones"></i> ' + t('listening_label') + '</p>' +
@@ -2536,20 +2627,10 @@
       '<button class="btn btn-outline-secondary btn-sm ex-audio-toggle" type="button" aria-label="' + tx('play_audio', 'Play audio') + '" title="' + tx('play_audio', 'Play audio') + '"><i class="bi bi-play-fill"></i></button>' +
       '</div>' +
       '</div>' +
-      '<button class="ex-transcript-toggle">' + t('show_transcript') + ' <i class="bi ' + t('close_transcript_icon_down') + '"></i></button>' +
-      '<div class="ex-transcript" hidden>' + listeningBaseText + '</div>' +
       '<p class="ex-question">' + listeningQuestion + '</p>' +
       '<div class="ex-fillin-wrap">' + sentenceWithInput + '</div>' +
-      '<button class="btn btn-outline-secondary ex-check-btn">' + t('check') + '</button>' +
+      '<button class="btn btn-outline-secondary ex-check-btn">' + checkLabel + '</button>' +
       '<div class="ex-feedback" hidden></div>';
-
-    container.querySelector('.ex-transcript-toggle').addEventListener('click', function () {
-      const transcriptEl = container.querySelector('.ex-transcript');
-      transcriptEl.hidden = !transcriptEl.hidden;
-      this.innerHTML = transcriptEl.hidden
-        ? t('show_transcript') + ' <i class="bi ' + t('close_transcript_icon_down') + '"></i>'
-        : t('hide_transcript') + ' <i class="bi ' + t('close_transcript_icon_up') + '"></i>';
-    });
 
     const toggleBtn = container.querySelector('.ex-audio-toggle');
     const toggleIcon = toggleBtn ? toggleBtn.querySelector('i') : null;
@@ -2695,6 +2776,12 @@
   }
 
   function renderPronounce(container, item) {
+    const transcriptLabel = resolveExerciseRuntimeTextRelaxed('speaking_transcript_label', uiFallback('speaking_transcript_label', 'Transcript'));
+    const listeningLabel = resolveExerciseRuntimeTextRelaxed('speaking_listening', uiFallback('speaking_listening', 'Listening...'));
+    const timerLabel = resolveExerciseRuntimeTextRelaxed('speaking_time', uiFallback('speaking_time', 'Time'));
+    const unsupportedText = resolveExerciseRuntimeTextRelaxed('speaking_not_supported', uiFallback('speaking_not_supported', 'Voice transcription is not available in this browser.'));
+    const noSpeechText = resolveExerciseRuntimeTextRelaxed('speaking_no_speech', uiFallback('speaking_no_speech', 'No speech was detected. Try again.'));
+
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-mic"></i> ' + t('speaking_label') + '</p>' +
       '<p class="ex-speaking-prompt">' + t('pronounce_out_loud') + '</p>' +
@@ -2703,47 +2790,249 @@
       '<div class="ex-mic-area">' +
       '<button class="ex-mic-btn" id="micBtn" aria-label="' + t('speaking_label') + '"><i class="bi bi-mic"></i></button>' +
       '</div>' +
-      '<div class="ex-self-check" hidden>' +
-      '<p>' + t('self_check_question') + '</p>' +
-      '<div class="ex-self-check-btns">' +
-      '<button class="btn btn-success ex-self-yes"><i class="bi bi-check-lg"></i> ' + t('self_check_yes') + '</button>' +
-      '<button class="btn btn-outline-danger ex-self-no">' + t('self_check_retry') + '</button>' +
-      '</div></div>';
+      '<p class="ex-speaking-status" id="speakingStatus" hidden></p>' +
+      '<p class="ex-speaking-timer" id="speakingTimer">' + timerLabel + ': 00:00</p>' +
+      '<p class="ex-speaking-transcript" id="speakingTranscript" hidden><strong>' + transcriptLabel + ':</strong> <span class="ex-speaking-transcript-text"></span></p>' +
+      '<div class="ex-feedback" hidden></div>';
 
     const micBtn = container.querySelector('#micBtn');
-    const selfCheck = container.querySelector('.ex-self-check');
+    const micIcon = micBtn ? micBtn.querySelector('i') : null;
+    const feedback = container.querySelector('.ex-feedback');
+    const status = container.querySelector('#speakingStatus');
+    const timer = container.querySelector('#speakingTimer');
+    const transcript = container.querySelector('#speakingTranscript');
+    const transcriptText = container.querySelector('.ex-speaking-transcript-text');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    micBtn.addEventListener('click', function () {
-      this.classList.toggle('recording');
-      const icon = this.querySelector('i');
-      if (this.classList.contains('recording')) {
-        playUiTone('neutral');
-        icon.className = 'bi bi-stop-fill';
-      } else {
-        playUiTone('neutral');
-        icon.className = 'bi bi-mic';
-        selfCheck.hidden = false;
+    let recognition = null;
+    let isRecording = false;
+    let timerId = null;
+    let elapsedSeconds = 0;
+    let shouldEvaluateOnStop = true;
+    let finalTranscript = '';
+    let interimTranscript = '';
+
+    const formatDuration = (seconds) => {
+      const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+      const secs = String(seconds % 60).padStart(2, '0');
+      return `${mins}:${secs}`;
+    };
+
+    const resetTimer = () => {
+      elapsedSeconds = 0;
+      if (timer) timer.textContent = `${timerLabel}: ${formatDuration(0)}`;
+    };
+
+    const stopTimer = () => {
+      if (timerId !== null) {
+        clearInterval(timerId);
+        timerId = null;
       }
-    });
+    };
 
-    container.querySelector('.ex-self-yes').addEventListener('click', () => {
-      playUiTone('success');
-      markExerciseItemResult(container, true, {
+    const startTimer = () => {
+      stopTimer();
+      timerId = window.setInterval(() => {
+        elapsedSeconds += 1;
+        if (timer) timer.textContent = `${timerLabel}: ${formatDuration(elapsedSeconds)}`;
+      }, 1000);
+    };
+
+    const setRecordingState = (recording) => {
+      isRecording = recording;
+      if (micBtn) micBtn.classList.toggle('recording', recording);
+      if (micIcon) micIcon.className = recording ? 'bi bi-stop-fill' : 'bi bi-mic';
+      if (status) {
+        status.hidden = !recording;
+        status.textContent = recording ? listeningLabel : '';
+      }
+    };
+
+    const resetSpeakingOutput = () => {
+      finalTranscript = '';
+      interimTranscript = '';
+      resetTimer();
+      if (feedback) {
+        feedback.hidden = true;
+        feedback.className = 'ex-feedback';
+        feedback.innerHTML = '';
+      }
+      if (transcriptText) transcriptText.textContent = '';
+      if (transcript) transcript.hidden = true;
+    };
+
+    const applyLiveTranscript = () => {
+      if (!transcriptText || !transcript) return;
+      const combined = [finalTranscript, interimTranscript].filter(Boolean).join(' ').trim();
+      transcriptText.textContent = combined;
+      transcript.hidden = combined === '';
+    };
+
+    const evaluateSpeakingAttempt = () => {
+      const spoken = [finalTranscript, interimTranscript].filter(Boolean).join(' ').trim();
+      if (!spoken) {
+        playUiTone('neutral');
+        if (feedback) {
+          feedback.className = 'ex-feedback ex-feedback--warn';
+          feedback.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> ' + noSpeechText;
+          feedback.hidden = false;
+        }
+        return;
+      }
+
+      if (transcriptText) transcriptText.textContent = spoken;
+      if (transcript) transcript.hidden = false;
+
+      const score = computeSpeechMatchScore(spoken, item.word || '');
+      const isCorrect = score >= 0.75;
+
+      if (isCorrect) {
+        playUiTone('success');
+        if (feedback) {
+          feedback.className = 'ex-feedback ex-feedback--ok';
+          feedback.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + t('correct');
+          feedback.hidden = false;
+        }
+      } else {
+        playIncorrectFeedback(item.type);
+        if (feedback) {
+          feedback.className = 'ex-feedback ex-feedback--err';
+          feedback.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + t('answer_is', { answer: '<strong>"' + item.word + '"</strong>' });
+          feedback.hidden = false;
+        }
+      }
+
+      markExerciseItemResult(container, isCorrect, {
         itemId: item.itemId,
         itemType: item.type,
         prompt: item.word,
         expectedAnswer: item.word,
-        answerText: item.word,
-        feedback: t('autovalidated_correct'),
+        answerText: spoken,
+        answerPayload: {
+          transcript: spoken,
+          recognition_lang: resolveSpeechRecognitionLocale(getActiveLang()),
+          duration_seconds: elapsedSeconds,
+          score,
+        },
+        feedback: isCorrect ? t('correct') : t('incorrect'),
       });
-      selfCheck.innerHTML = '<p class="ex-feedback ex-feedback--ok" style="display:block"><i class="bi bi-check-circle-fill"></i> ' + t('self_check_success') + '</p>';
-    });
-    container.querySelector('.ex-self-no').addEventListener('click', () => {
+    };
+
+    const stopSpeakingCapture = (evaluateAfterStop = false) => {
+      stopTimer();
+      shouldEvaluateOnStop = evaluateAfterStop;
+
+      if (recognition && isRecording) {
+        try {
+          recognition.stop();
+        } catch {
+          setRecordingState(false);
+        }
+        return;
+      }
+
+      setRecordingState(false);
+      if (evaluateAfterStop) {
+        evaluateSpeakingAttempt();
+      }
+    };
+
+    const startSpeakingCapture = () => {
+      resetSpeakingOutput();
+
+      if (!SpeechRecognition) {
+        playUiTone('neutral');
+        if (feedback) {
+          feedback.className = 'ex-feedback ex-feedback--warn';
+          feedback.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + unsupportedText;
+          feedback.hidden = false;
+        }
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = resolveSpeechRecognitionLocale(getActiveLang());
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        shouldEvaluateOnStop = true;
+        setRecordingState(true);
+        startTimer();
+      };
+
+      recognition.onresult = (event) => {
+        interimTranscript = '';
+
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const segment = String(event.results[index][0]?.transcript || '').trim();
+          if (!segment) continue;
+
+          if (event.results[index].isFinal) {
+            finalTranscript = (finalTranscript + ' ' + segment).trim();
+          } else {
+            interimTranscript = (interimTranscript + ' ' + segment).trim();
+          }
+        }
+
+        applyLiveTranscript();
+      };
+
+      recognition.onerror = (event) => {
+        stopTimer();
+        shouldEvaluateOnStop = false;
+        setRecordingState(false);
+
+        const code = String(event?.error || '').toLowerCase();
+        const permissionDenied = code === 'not-allowed' || code === 'service-not-allowed';
+        const noMatch = code === 'no-speech' || code === 'nomatch';
+        const message = permissionDenied
+          ? tx('microphone_permission_required', 'Microphone permission is required to record.')
+          : (noMatch ? noSpeechText : tx('recording_failed', 'Recording failed. Try again.'));
+
+        if (feedback) {
+          feedback.className = 'ex-feedback ex-feedback--warn';
+          feedback.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + sanitizeRuntimeText(message);
+          feedback.hidden = false;
+        }
+      };
+
+      recognition.onend = () => {
+        stopTimer();
+        setRecordingState(false);
+
+        if (shouldEvaluateOnStop) {
+          evaluateSpeakingAttempt();
+        }
+
+        recognition = null;
+      };
+
+      try {
+        recognition.start();
+      } catch {
+        recognition = null;
+        if (feedback) {
+          feedback.className = 'ex-feedback ex-feedback--warn';
+          feedback.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' + unsupportedText;
+          feedback.hidden = false;
+        }
+      }
+    };
+
+    micBtn.addEventListener('click', function () {
+      if (isRecording) {
+        playUiTone('neutral');
+        stopSpeakingCapture(true);
+        return;
+      }
+
       playUiTone('neutral');
-      selfCheck.hidden = true;
-      micBtn.classList.remove('recording');
-      micBtn.querySelector('i').className = 'bi bi-mic';
+      startSpeakingCapture();
     });
+
+    activeListeningStopHandler = () => stopSpeakingCapture(false);
   }
 
   function renderTranslate(container, item) {
@@ -2771,13 +3060,14 @@
       return rawSentence;
     })();
     const writingPlaceholder = resolveExerciseRuntimeTextRelaxed('write_placeholder', uiFallback('write_placeholder', ''));
+    const checkLabel = resolveExerciseRuntimeTextRelaxed('check', uiFallback('check', 'Check'));
 
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-pencil"></i> ' + t('writing_label') + '</p>' +
       '<p class="ex-prompt">' + writingPrompt + '</p>' +
       '<div class="ex-sentence-box">' + writingSentence + '</div>' +
       '<textarea class="ex-textarea" placeholder="' + writingPlaceholder + '"></textarea>' +
-      '<button class="btn btn-outline-secondary ex-check-btn">' + t('check') + '</button>' +
+      '<button class="btn btn-outline-secondary ex-check-btn">' + checkLabel + '</button>' +
       '<div class="ex-feedback" hidden></div>';
 
     container.querySelector('.ex-check-btn').addEventListener('click', () => {
