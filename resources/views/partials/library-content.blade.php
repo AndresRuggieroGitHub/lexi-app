@@ -1,6 +1,42 @@
 @php
   $cefrLevels = config('lexi.cefr_levels', ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
   $catalogTopics = config('lexi.catalog_topics', []);
+  $uiLocale = strtolower((string) app()->getLocale());
+  $uiLocale = preg_split('/[-_]/', $uiLocale)[0] ?: 'en';
+
+  $nativeCategoryLabels = [
+    'en' => [
+      'travel' => 'Travel', 'food' => 'Food', 'work' => 'Work', 'business' => 'Business', 'education' => 'Education',
+      'health' => 'Health', 'science' => 'Science', 'technology' => 'Technology', 'culture' => 'Culture', 'social' => 'Social',
+      'home' => 'Home', 'nature' => 'Nature', 'politics' => 'Politics', 'sport' => 'Sport', 'art' => 'Art',
+      'media' => 'Media', 'law' => 'Law', 'finance' => 'Finance',
+    ],
+    'es' => [
+      'travel' => 'Viajes', 'food' => 'Gastronomia', 'work' => 'Trabajo', 'business' => 'Negocios', 'education' => 'Educacion',
+      'health' => 'Salud', 'science' => 'Ciencia', 'technology' => 'Tecnologia', 'culture' => 'Cultura', 'social' => 'Social',
+      'home' => 'Hogar', 'nature' => 'Naturaleza', 'politics' => 'Politica', 'sport' => 'Deporte', 'art' => 'Arte',
+      'media' => 'Medios', 'law' => 'Derecho', 'finance' => 'Finanzas',
+    ],
+    'fr' => [
+      'travel' => 'Voyages', 'food' => 'Gastronomie', 'work' => 'Travail', 'business' => 'Affaires', 'education' => 'Education',
+      'health' => 'Sante', 'science' => 'Science', 'technology' => 'Technologie', 'culture' => 'Culture', 'social' => 'Social',
+      'home' => 'Maison', 'nature' => 'Nature', 'politics' => 'Politique', 'sport' => 'Sport', 'art' => 'Art',
+      'media' => 'Medias', 'law' => 'Droit', 'finance' => 'Finance',
+    ],
+    'de' => [
+      'travel' => 'Reisen', 'food' => 'Essen', 'work' => 'Arbeit', 'business' => 'Wirtschaft', 'education' => 'Bildung',
+      'health' => 'Gesundheit', 'science' => 'Wissenschaft', 'technology' => 'Technologie', 'culture' => 'Kultur', 'social' => 'Soziales',
+      'home' => 'Zuhause', 'nature' => 'Natur', 'politics' => 'Politik', 'sport' => 'Sport', 'art' => 'Kunst',
+      'media' => 'Medien', 'law' => 'Recht', 'finance' => 'Finanzen',
+    ],
+  ];
+
+  $allTopicsNativeLabels = [
+    'en' => 'All categories',
+    'es' => 'Todas las categorias',
+    'fr' => 'Toutes les categories',
+    'de' => 'Alle Kategorien',
+  ];
 
   $levelOptionLabel = static function (string $level): string {
       return match ($level) {
@@ -11,6 +47,23 @@
           default => '▮▮▮▮▮ ' . $level,
       };
   };
+
+        $topicEmoji = static function (string $label): string {
+          if (preg_match('/^([^\p{L}\p{N}\s]+)/u', trim($label), $matches)) {
+            return $matches[1];
+          }
+
+          return '';
+        };
+
+  $topicNativeLabel = static function (string $topicKey) use ($nativeCategoryLabels, $uiLocale): string {
+      $topicKey = strtolower(trim($topicKey));
+      $localeLabels = $nativeCategoryLabels[$uiLocale] ?? $nativeCategoryLabels['en'];
+
+      return $localeLabels[$topicKey] ?? ucfirst(str_replace(['_', '-'], ' ', $topicKey));
+  };
+
+  $allTopicsLabel = $allTopicsNativeLabels[$uiLocale] ?? $allTopicsNativeLabels['en'];
 @endphp
 
 <main id="mainContent" class="page-main container section-space">
@@ -109,9 +162,9 @@
               @endforeach
             </select>
             <select id="topicFilter" class="form-select form-select-sm">
-              <option value="all">{{ __('lexi.library.all_topics') }}</option>
+              <option value="all">{{ $allTopicsLabel }}</option>
               @foreach ($catalogTopics as $topic)
-                <option value="{{ $topic['value'] }}">{{ $topic['label'] }}</option>
+                <option value="{{ $topic['value'] }}">{{ trim(($topicEmoji((string) ($topic['label'] ?? '')) ? $topicEmoji((string) ($topic['label'] ?? '')) . ' ' : '') . $topicNativeLabel((string) ($topic['value'] ?? ''))) }}</option>
               @endforeach
             </select>
           </div>
@@ -1196,7 +1249,7 @@
   <div class="save-dropdown-divider"></div>
   <div class="save-dropdown-new-wrap" id="saveDropdownNewWrap">
     <button class="save-dropdown-new-btn" id="saveDropdownNewBtn" type="button">
-      <i class="bi bi-plus-circle"></i> Nueva colección
+      <i class="bi bi-plus-circle"></i> {{ __('lexi.library.new_collection') }}
     </button>
   </div>
 </div>
@@ -1205,12 +1258,12 @@
   <div class="lexi-modal" role="dialog" aria-modal="true" aria-labelledby="renameModalTitle">
     <div class="lexi-modal-header">
       <div class="lexi-modal-icon lexi-modal-icon--brand"><i class="bi bi-pencil-fill"></i></div>
-      <p class="lexi-modal-title" id="renameModalTitle">Renombrar lista</p>
+      <p class="lexi-modal-title" id="renameModalTitle">{{ __('lexi.library.rename_list_title') }}</p>
     </div>
-    <input type="text" id="renameCollInput" class="lexi-modal-input" placeholder="Nombre de la lista" maxlength="40">
+    <input type="text" id="renameCollInput" class="lexi-modal-input" placeholder="{{ __('lexi.library.list_name_placeholder') }}" maxlength="40">
     <div class="lexi-modal-actions">
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="renameCollCancel">Cancelar</button>
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--primary" id="renameCollConfirm"><i class="bi bi-check2"></i> Guardar</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="renameCollCancel">{{ __('lexi.common.cancel') }}</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--primary" id="renameCollConfirm"><i class="bi bi-check2"></i> {{ __('lexi.common.save') }}</button>
     </div>
   </div>
 </div>
@@ -1219,13 +1272,13 @@
   <div class="lexi-modal" role="dialog" aria-modal="true" aria-labelledby="createModalTitle">
     <div class="lexi-modal-header">
       <div class="lexi-modal-icon lexi-modal-icon--brand"><i class="bi bi-folder-plus"></i></div>
-      <p class="lexi-modal-title" id="createModalTitle">Nueva colección</p>
-      <p class="lexi-modal-body">Crea una lista personalizada para guardar vocabulario relacionado.</p>
+      <p class="lexi-modal-title" id="createModalTitle">{{ __('lexi.library.new_collection') }}</p>
+      <p class="lexi-modal-body">{{ __('lexi.library.create_collection_body') }}</p>
     </div>
-    <input type="text" id="createCollInput" class="lexi-modal-input" placeholder="Nombre de la colección" maxlength="40">
+    <input type="text" id="createCollInput" class="lexi-modal-input" placeholder="{{ __('lexi.library.collection_name_placeholder') }}" maxlength="40">
     <div class="lexi-modal-actions">
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="createCollCancel">Cancelar</button>
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--primary" id="createCollConfirm"><i class="bi bi-plus-lg"></i> Crear</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="createCollCancel">{{ __('lexi.common.cancel') }}</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--primary" id="createCollConfirm"><i class="bi bi-plus-lg"></i> {{ __('lexi.library.create') }}</button>
     </div>
   </div>
 </div>
@@ -1234,12 +1287,12 @@
   <div class="lexi-modal lexi-modal--confirm" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
     <div class="lexi-modal-header">
       <div class="lexi-modal-icon lexi-modal-icon--danger"><i class="bi bi-trash-fill"></i></div>
-      <p class="lexi-modal-title" id="deleteModalTitle">Eliminar colección</p>
-      <p class="lexi-modal-body" id="deleteModalBody">Esta acción no se puede deshacer.</p>
+      <p class="lexi-modal-title" id="deleteModalTitle">{{ __('lexi.library.delete_collection_title') }}</p>
+      <p class="lexi-modal-body" id="deleteModalBody">{{ __('lexi.library.irreversible_action') }}</p>
     </div>
     <div class="lexi-modal-actions">
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="deleteCollCancel">Cancelar</button>
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--danger" id="deleteCollConfirm"><i class="bi bi-trash"></i> Eliminar</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="deleteCollCancel">{{ __('lexi.common.cancel') }}</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--danger" id="deleteCollConfirm"><i class="bi bi-trash"></i> {{ __('lexi.library.delete') }}</button>
     </div>
   </div>
 </div>
@@ -1248,12 +1301,12 @@
   <div class="lexi-modal lexi-modal--confirm" role="dialog" aria-modal="true" aria-labelledby="clearModalTitle">
     <div class="lexi-modal-header">
       <div class="lexi-modal-icon lexi-modal-icon--warning"><i class="bi bi-eraser-fill"></i></div>
-      <p class="lexi-modal-title" id="clearModalTitle">Vaciar lista</p>
-      <p class="lexi-modal-body" id="clearModalBody">Se eliminarán todas las palabras de esta colección.</p>
+      <p class="lexi-modal-title" id="clearModalTitle">{{ __('lexi.library.clear_list_title') }}</p>
+      <p class="lexi-modal-body" id="clearModalBody">{{ __('lexi.js.library.clear_collection_body') }}</p>
     </div>
     <div class="lexi-modal-actions">
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="clearCollCancel">Cancelar</button>
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--warning" id="clearCollConfirm"><i class="bi bi-eraser"></i> Vaciar</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="clearCollCancel">{{ __('lexi.common.cancel') }}</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--warning" id="clearCollConfirm"><i class="bi bi-eraser"></i> {{ __('lexi.library.clear') }}</button>
     </div>
   </div>
 </div>
@@ -1262,14 +1315,14 @@
   <div class="lexi-modal" role="dialog" aria-modal="true" aria-labelledby="importCatalogModalTitle">
     <div class="lexi-modal-header">
       <div class="lexi-modal-icon lexi-modal-icon--brand"><i class="bi bi-journals"></i></div>
-      <p class="lexi-modal-title" id="importCatalogModalTitle">Importar desde catálogo</p>
-      <p class="lexi-modal-body">Solo se guardarán las palabras que ya existan en el catálogo del idioma activo.</p>
+      <p class="lexi-modal-title" id="importCatalogModalTitle">{{ __('lexi.library.import_words') }}</p>
+      <p class="lexi-modal-body">{{ __('lexi.js.library.save_from_catalog') }}</p>
     </div>
 
     <div class="import-dest-picker">
       {{-- Fila fija: Guardado --}}
       <div class="import-dest-main-row">
-        <span class="import-dest-main-label">Guardado</span>
+        <span class="import-dest-main-label">{{ __('lexi.js.main_library_name') }}</span>
         <span class="import-dest-main-check" aria-hidden="true"><i class="bi bi-bookmark-fill"></i></span>
       </div>
 
@@ -1280,18 +1333,18 @@
       {{-- Nueva colección --}}
       <div class="import-dest-divider"></div>
       <button type="button" class="save-dropdown-new-btn" id="importDestNewBtn">
-        <i class="bi bi-plus-circle"></i> Nueva colección
+        <i class="bi bi-plus-circle"></i> {{ __('lexi.library.new_collection') }}
       </button>
       <div id="importDestNewWrap" hidden style="margin-top:0.6rem;">
-        <input type="text" id="importDestNewInput" class="lexi-modal-input" maxlength="120" placeholder="Nombre de la colección" style="margin-bottom:0;" />
+        <input type="text" id="importDestNewInput" class="lexi-modal-input" maxlength="120" placeholder="{{ __('lexi.library.collection_name_placeholder') }}" style="margin-bottom:0;" />
       </div>
 
       <p class="lexi-modal-body" id="importDestSummary" style="margin-top:0.75rem;"></p>
     </div>
 
     <div class="lexi-modal-actions" style="margin-top:1.25rem;">
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="importCatalogCancel">Cancelar</button>
-      <button type="button" class="lexi-modal-btn lexi-modal-btn--primary" id="importCatalogConfirm"><i class="bi bi-check2"></i> Importar</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--ghost" id="importCatalogCancel">{{ __('lexi.common.cancel') }}</button>
+      <button type="button" class="lexi-modal-btn lexi-modal-btn--primary" id="importCatalogConfirm"><i class="bi bi-check2"></i> {{ __('lexi.library.import_words') }}</button>
     </div>
   </div>
 </div>

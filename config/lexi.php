@@ -2,6 +2,7 @@
 
 return [
     'cefr_levels' => ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'],
+    'ui_runtime_warm' => env('LEXI_UI_RUNTIME_WARM', false),
     'ui_locales' => [
         'ar', 'bg', 'cs', 'de', 'dk',
         'en', 'es', 'fi', 'fr', 'gr',

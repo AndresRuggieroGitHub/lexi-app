@@ -100,6 +100,9 @@
 <script>
 (function () {
   const EXERCISE_I18N = (window.lexiTranslations && window.lexiTranslations.js && window.lexiTranslations.js.exercise_runtime) || {};
+  const JS_I18N = (window.lexiTranslations && window.lexiTranslations.js) || {};
+  const EXERCISES_GROUP_I18N = (window.lexiTranslations && window.lexiTranslations.exercises) || {};
+  const CATEGORY_I18N = (window.lexiTranslations && window.lexiTranslations.categories) || {};
   const t = (key, replacements = {}) => {
     const template = EXERCISE_I18N[key];
     if (typeof template !== 'string') return key;
@@ -109,6 +112,179 @@
   const tx = (key, fallback) => {
     const value = t(key);
     return value === key ? fallback : value;
+  };
+  const te = (key, fallback) => {
+    const value = EXERCISES_GROUP_I18N[key];
+    return typeof value === 'string' && value.trim() !== '' ? value : fallback;
+  };
+  const sanitizeRuntimeText = (value) => {
+    let text = String(value || '');
+    text = text.replace(/```+/g, '');
+    text = text.replace(/^\s{0,3}#{1,6}\s*/gm, '');
+    text = text.replace(/\*\*(.*?)\*\*/g, '$1');
+    text = text.replace(/__(.*?)__/g, '$1');
+    text = text.replace(/`([^`]+)`/g, '$1');
+    return text.replace(/\s+/g, ' ').trim();
+  };
+  const isLikelyEnglishRuntimeText = (value) => {
+    const text = String(value || '').toLowerCase();
+    if (!text) return false;
+    return /(choose|option|sentence|scenario|correct|answer|gap|draft|proposal|aligns|strategic|priorities|before|should|team)/.test(text);
+  };
+  const getUiLocale = () => {
+    const fromWindow = String(window.lexiUiLocale || '').trim().toLowerCase();
+    if (fromWindow) return fromWindow.split('-')[0];
+
+    const fromSession = String(window.lexiSessionState?.user?.mother_tongue_code || '').trim().toLowerCase();
+    if (fromSession) return fromSession.split('-')[0];
+
+    return String(document.documentElement.lang || 'en').toLowerCase().split('-')[0];
+  };
+  const isNonEnglishUiLocale = () => getUiLocale() !== 'en';
+  const UI_RUNTIME_FALLBACKS = {
+    en: {
+      loading_exercise: 'Preparing exercises...',
+      loading_options: 'Loading options...',
+      loading_saved_lists: 'Loading your lists...',
+      loading_catalog: 'Loading catalog...',
+      all_levels: 'All levels',
+      all_categories: 'All categories',
+      all_collections: 'All collections',
+      catalog_name: 'Catalog',
+      saved_name: 'Saved list',
+      saved_lists_name: 'Your lists',
+      listening_question_default: 'Listen and type the missing expression.',
+      translate_to_english: 'Translate to English.',
+      write_placeholder: 'Write your translation here...',
+      matching_question: 'Match each word with the correct translation.',
+      memory_question: 'Find all translation pairs with the fewest moves.',
+      matching_label: 'Matching',
+      memory_label: 'Memory',
+      pairs_label: 'Pairs',
+      moves_label: 'Moves',
+      matching_timeout: 'Time is over. Try again to beat the clock.',
+      matching_success: 'Great speed. Challenge completed.',
+      memory_success: 'All pairs completed. Great focus.',
+    },
+    es: {
+      loading_exercise: 'Preparando ejercicios...',
+      loading_options: 'Cargando opciones...',
+      loading_saved_lists: 'Cargando tus listas...',
+      loading_catalog: 'Cargando catalogo...',
+      all_levels: 'Todos los niveles',
+      all_categories: 'Todas las categorias',
+      all_collections: 'Todas las listas',
+      catalog_name: 'Catalogo',
+      saved_name: 'Lista guardada',
+      saved_lists_name: 'Tus listas',
+      listening_question_default: 'Escucha y escribe la expresion que falta.',
+      translate_to_english: 'Traduce al ingles.',
+      write_placeholder: 'Escribe tu traduccion aqui...',
+      matching_question: 'Conecta cada palabra con su traduccion correcta.',
+      memory_question: 'Encuentra todas las parejas de traduccion con el menor numero de movimientos.',
+      matching_label: 'Conectar columnas',
+      memory_label: 'Memoria',
+      pairs_label: 'Parejas',
+      moves_label: 'Movimientos',
+      matching_timeout: 'Se acabo el tiempo. Intentalo de nuevo.',
+      matching_success: 'Gran velocidad. Desafio completado.',
+      memory_success: 'Todas las parejas completadas. Gran concentracion.',
+    },
+    fr: {
+      loading_exercise: 'Preparation des exercices...',
+      loading_options: 'Chargement des options...',
+      loading_saved_lists: 'Chargement de tes listes...',
+      loading_catalog: 'Chargement du catalogue...',
+      all_levels: 'Tous les niveaux',
+      all_categories: 'Toutes les categories',
+      all_collections: 'Toutes les listes',
+      catalog_name: 'Catalogue',
+      saved_name: 'Liste enregistree',
+      saved_lists_name: 'Tes listes',
+      listening_question_default: 'Ecoute et ecris lexpression manquante.',
+      translate_to_english: 'Traduis en anglais.',
+      write_placeholder: 'Ecris ta traduction ici...',
+      matching_question: 'Associe chaque mot a la bonne traduction.',
+      memory_question: 'Trouve toutes les paires de traduction avec le moins de mouvements.',
+      matching_label: 'Correspondance',
+      memory_label: 'Memoire',
+      pairs_label: 'Paires',
+      moves_label: 'Mouvements',
+      matching_timeout: 'Le temps est ecoule. Reessaie.',
+      matching_success: 'Excellente vitesse. Defi reussi.',
+      memory_success: 'Toutes les paires sont completees. Excellent focus.',
+    },
+    de: {
+      loading_exercise: 'Ubungen werden vorbereitet...',
+      loading_options: 'Optionen werden geladen...',
+      loading_saved_lists: 'Deine Listen werden geladen...',
+      loading_catalog: 'Katalog wird geladen...',
+      all_levels: 'Alle Niveaus',
+      all_categories: 'Alle Kategorien',
+      all_collections: 'Alle Listen',
+      catalog_name: 'Katalog',
+      saved_name: 'Gespeicherte Liste',
+      saved_lists_name: 'Deine Listen',
+      listening_question_default: 'Hore zu und schreibe den fehlenden Ausdruck.',
+      translate_to_english: 'Ubersetze ins Englische.',
+      write_placeholder: 'Schreibe deine Ubersetzung hier...',
+      matching_question: 'Ordne jedes Wort der richtigen Ubersetzung zu.',
+      memory_question: 'Finde alle Ubersetzungspaare mit moglichst wenigen Zugen.',
+      matching_label: 'Zuordnen',
+      memory_label: 'Memory',
+      pairs_label: 'Paare',
+      moves_label: 'Zuge',
+      matching_timeout: 'Die Zeit ist abgelaufen. Versuche es erneut.',
+      matching_success: 'Starkes Tempo. Herausforderung geschafft.',
+      memory_success: 'Alle Paare gefunden. Sehr gut.',
+    },
+  };
+  const uiFallback = (key, fallback = '') => {
+    const locale = getUiLocale();
+    const table = UI_RUNTIME_FALLBACKS[locale] || UI_RUNTIME_FALLBACKS.en;
+    const candidate = table && typeof table[key] === 'string' ? table[key] : '';
+    if (candidate.trim() !== '') return candidate;
+    return fallback;
+  };
+  const normalizeLooseText = (value) => String(value || '').trim().toLowerCase();
+  const isEnglishUiLeakForKey = (key, value) => {
+    if (getUiLocale() === 'en') return false;
+
+    const english = normalizeLooseText(UI_RUNTIME_FALLBACKS.en?.[key] || '');
+    const candidate = normalizeLooseText(value);
+    if (!english || !candidate) return false;
+
+    return candidate === english;
+  };
+  const resolveUiChoiceLabel = (key, fallback = '') => {
+    const candidate = sanitizeRuntimeText(tx(key, uiFallback(key, fallback)));
+    if (candidate && !isEnglishUiLeakForKey(key, candidate)) {
+      return candidate;
+    }
+
+    return sanitizeRuntimeText(uiFallback(key, fallback));
+  };
+  const resolveExerciseRuntimeText = (key, fallback = '') => {
+    const keyValue = sanitizeRuntimeText(t(key));
+    if (keyValue && keyValue !== key && (!isNonEnglishUiLocale() || !isLikelyEnglishRuntimeText(keyValue))) {
+      return keyValue;
+    }
+
+    const fallbackValue = sanitizeRuntimeText(fallback);
+    if (!isNonEnglishUiLocale() || !isLikelyEnglishRuntimeText(fallbackValue)) {
+      return fallbackValue;
+    }
+
+    return '';
+  };
+  const resolveExerciseRuntimeTextRelaxed = (key, fallback = '') => {
+    const strictValue = resolveExerciseRuntimeText(key, fallback);
+    if (strictValue) return strictValue;
+
+    const keyValue = sanitizeRuntimeText(tx(key, uiFallback(key, fallback)));
+    if (keyValue) return keyValue;
+
+    return sanitizeRuntimeText(uiFallback(key, fallback));
   };
   const sharedConfigNode = document.getElementById('lexiExerciseSharedConfig');
   const sharedConfig = sharedConfigNode ? JSON.parse(sharedConfigNode.textContent || '{}') : {};
@@ -157,11 +333,11 @@
   const EXERCISE_CATALOG_LEVEL_KEY = 'lexiExerciseCatalogLevel';
   const EXERCISE_CATALOG_TOPIC_KEY = 'lexiExerciseCatalogTopic';
   const CEFR_LEVELS = Array.isArray(SHARED_CEFR_LEVELS) && SHARED_CEFR_LEVELS.length ? SHARED_CEFR_LEVELS : ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-  let serverVocabularyState = { library: { id: 'library', name: t('saved_name'), items: [] }, collections: [], catalog: [] };
+  let serverVocabularyState = { library: { id: 'library', name: resolveExerciseRuntimeTextRelaxed('saved_name', uiFallback('saved_name', 'Saved list')), items: [] }, collections: [], catalog: [] };
   let serverVocabularyLanguage = null;
   let exerciseSourceSwitchToken = 0;
 
-  function setExerciseCollectionsLoading(isLoading, message = t('loading_options')) {
+  function setExerciseCollectionsLoading(isLoading, message = resolveExerciseRuntimeTextRelaxed('loading_options', uiFallback('loading_options', 'Loading options...'))) {
     const select = document.getElementById('exerciseCollectionSelect');
     const levelSelect = document.getElementById('exerciseCatalogLevelSelect');
     const topicSelect = document.getElementById('exerciseCatalogTopicSelect');
@@ -195,7 +371,7 @@
 
     function getLocalizedModeTitle(mode) {
       if (mode === 'mix') {
-        const labels = resolveModeLabelsForLanguage(getActiveLang());
+        const labels = resolveModeLabelsForLanguage(getUiLocale());
         return tx('challenge_label', labels[4] || 'Challenge');
       }
 
@@ -204,14 +380,79 @@
         return mode;
       }
 
-      const labels = resolveModeLabelsForLanguage(getActiveLang());
+      const labels = resolveModeLabelsForLanguage(getUiLocale());
       return labels[modeIndex] || mode;
     }
 
-  const TOPIC_OPTION_LABELS = SHARED_TOPIC_OPTIONS.reduce((labels, topic) => {
-    labels[topic.value] = topic.label;
+  function extractTopicEmoji(label) {
+    const source = String(label || '').trim();
+    const match = source.match(/^([^\p{L}\p{N}\s]+)/u);
+    return match ? match[1] : '';
+  }
+
+  function stripTopicEmoji(label) {
+    return String(label || '').replace(/^([^\p{L}\p{N}\s]+\s*)+/u, '').trim();
+  }
+
+  const TOPIC_OPTION_EMOJIS = SHARED_TOPIC_OPTIONS.reduce((labels, topic) => {
+    const key = normalizeTopicKey(topic.value);
+    labels[key] = extractTopicEmoji(topic.label);
     return labels;
-  }, { cultura: '🎭 Cultura' });
+  }, {});
+
+  const EXERCISE_TOPIC_FALLBACKS = {
+    en: {
+      travel: 'Travel', food: 'Food', work: 'Work', business: 'Business', education: 'Education',
+      health: 'Health', science: 'Science', technology: 'Technology', culture: 'Culture', social: 'Social',
+      home: 'Home', nature: 'Nature', politics: 'Politics', sport: 'Sport', art: 'Art',
+      media: 'Media', law: 'Law', finance: 'Finance'
+    },
+    es: {
+      travel: 'Viajes', food: 'Gastronomia', work: 'Trabajo', business: 'Negocios', education: 'Educacion',
+      health: 'Salud', science: 'Ciencia', technology: 'Tecnologia', culture: 'Cultura', social: 'Social',
+      home: 'Hogar', nature: 'Naturaleza', politics: 'Politica', sport: 'Deporte', art: 'Arte',
+      media: 'Medios', law: 'Derecho', finance: 'Finanzas'
+    },
+    fr: {
+      travel: 'Voyages', food: 'Gastronomie', work: 'Travail', business: 'Affaires', education: 'Education',
+      health: 'Sante', science: 'Science', technology: 'Technologie', culture: 'Culture', social: 'Social',
+      home: 'Maison', nature: 'Nature', politics: 'Politique', sport: 'Sport', art: 'Art',
+      media: 'Medias', law: 'Droit', finance: 'Finance'
+    },
+    de: {
+      travel: 'Reisen', food: 'Essen', work: 'Arbeit', business: 'Wirtschaft', education: 'Bildung',
+      health: 'Gesundheit', science: 'Wissenschaft', technology: 'Technologie', culture: 'Kultur', social: 'Soziales',
+      home: 'Zuhause', nature: 'Natur', politics: 'Politik', sport: 'Sport', art: 'Kunst',
+      media: 'Medien', law: 'Recht', finance: 'Finanzen'
+    }
+  };
+
+  function getExerciseTopicFallbackLabel(topicKey) {
+    const locale = getUiLocale();
+    const table = EXERCISE_TOPIC_FALLBACKS[locale] || EXERCISE_TOPIC_FALLBACKS.en;
+    const value = table && typeof table[topicKey] === 'string' ? table[topicKey] : '';
+    return value.trim();
+  }
+  function isEnglishExerciseCategoryLeak(topicKey, value) {
+    if (getUiLocale() === 'en') return false;
+
+    const english = normalizeLooseText(EXERCISE_TOPIC_FALLBACKS.en?.[topicKey] || '');
+    const candidate = normalizeLooseText(value);
+    if (!english || !candidate) return false;
+
+    return candidate === english;
+  }
+
+  const TOPIC_OPTION_LABELS = SHARED_TOPIC_OPTIONS.reduce((labels, topic) => {
+    const key = normalizeTopicKey(topic.value);
+    const translated = CATEGORY_I18N[key];
+    const fallbackLabel = getExerciseTopicFallbackLabel(key);
+    labels[key] = typeof translated === 'string' && translated.trim() !== ''
+      && !isEnglishExerciseCategoryLeak(key, translated)
+      ? translated
+      : (fallbackLabel || stripTopicEmoji(String(topic.label || key)).trim());
+    return labels;
+  }, {});
   const CATALOG_VOCABULARY = [
     { id: 'w-heritage', lang: 'en', cefr: 'B2', topic: 'culture', text: 'to preserve heritage', translation: 'preservar el patrimonio' },
     { id: 'w-growth', lang: 'en', cefr: 'B1', topic: 'business', text: 'sustainable growth', translation: 'crecimiento sostenible' },
@@ -289,11 +530,20 @@
     return normalized === 'cultura' ? 'culture' : normalized;
   }
 
+  function getTopicLabel(topicValue) {
+    const key = normalizeTopicKey(topicValue);
+    const translatedLabel = TOPIC_OPTION_LABELS[key] || '';
+    const fallbackLabel = stripTopicEmoji(String(topicValue || '').replace(/[_-]+/g, ' ')).trim();
+    const label = (translatedLabel || fallbackLabel || key || '').trim();
+    const emoji = TOPIC_OPTION_EMOJIS[key] || '';
+    return emoji ? (emoji + ' ' + label).trim() : label;
+  }
+
   function getTopicOptions() {
     return SHARED_TOPIC_OPTIONS;
   }
 
-  async function loadVocabularySources(message = t('loading_options'), showSpinner = false, forceReload = false) {
+  async function loadVocabularySources(message = resolveExerciseRuntimeTextRelaxed('loading_options', uiFallback('loading_options', 'Loading options...')), showSpinner = false, forceReload = false) {
     const activeLang = getActiveLang();
     const hasCachedState = Array.isArray(serverVocabularyState.catalog)
       && Array.isArray(serverVocabularyState.collections)
@@ -314,7 +564,7 @@
       serverVocabularyState = {
         library: {
           id: 'library',
-          name: t('saved_name'),
+          name: resolveExerciseRuntimeTextRelaxed('saved_name', uiFallback('saved_name', 'Saved list')),
           items: Array.isArray(payload.items) ? payload.items : [],
         },
         collections: Array.isArray(payload.collections) ? payload.collections : [],
@@ -323,7 +573,7 @@
       serverVocabularyLanguage = activeLang;
     } catch {
       serverVocabularyState = {
-        library: { id: 'library', name: t('saved_name'), items: [] },
+        library: { id: 'library', name: resolveExerciseRuntimeTextRelaxed('saved_name', uiFallback('saved_name', 'Saved list')), items: [] },
         collections: [],
         catalog: [],
       };
@@ -348,7 +598,7 @@
       activeLang,
       library: {
         id: 'library',
-        name: t('saved_name'),
+        name: resolveExerciseRuntimeTextRelaxed('saved_name', uiFallback('saved_name', 'Saved list')),
         items: libraryItems,
       },
       collections,
@@ -400,7 +650,7 @@
 
     return {
       id: 'catalog',
-      name: [selectedLevel, selectedTopic].filter(Boolean).join(' · ') || t('catalog_name'),
+      name: [selectedLevel, selectedTopic].filter(Boolean).join(' · ') || resolveUiChoiceLabel('catalog_name', 'Catalog'),
       items: filteredItems,
       levels,
       topics,
@@ -432,11 +682,11 @@
     if (selectedId === 'all_saved') {
       return {
         id: 'all_saved',
-        name: tx('all_collections', 'Todas las colecciones'),
+        name: resolveExerciseRuntimeTextRelaxed('all_collections', uiFallback('all_collections', 'All collections')),
         items: aggregateSavedItems(library, collections),
       };
     }
-    return collections.find(collection => String(collection.id) === selectedId) || (selectedId === 'library' ? library : { id: 'saved', name: t('saved_lists_name'), items: [] });
+    return collections.find(collection => String(collection.id) === selectedId) || (selectedId === 'library' ? library : { id: 'saved', name: resolveExerciseRuntimeTextRelaxed('saved_lists_name', uiFallback('saved_lists_name', 'Your lists')), items: [] });
   }
 
   function syncSourcePanels() {
@@ -459,8 +709,8 @@
 
     if (isSwitching) {
       const message = sourceType === 'saved'
-        ? tx('loading_saved_lists', 'Cargando tus listas...')
-        : tx('loading_catalog', 'Cargando catalogo...');
+        ? resolveExerciseRuntimeTextRelaxed('loading_saved_lists', uiFallback('loading_saved_lists', 'Loading your lists...'))
+        : resolveExerciseRuntimeTextRelaxed('loading_catalog', uiFallback('loading_catalog', 'Loading catalog...'));
       setExerciseCollectionsLoading(true, message);
     } else {
       setExerciseCollectionsLoading(false);
@@ -515,12 +765,12 @@
 
     if (count <= 0) {
       if (sourceType === 'saved') {
-        setExerciseSourceNotice(tx('source_saved_empty', 'Esta lista no tiene palabras. Añade vocabulario para practicar.'));
+        setExerciseSourceNotice(tx('source_saved_empty', 'This list has no words yet. Add vocabulary to practice.'));
       } else {
-        setExerciseSourceNotice(tx('source_catalog_empty', 'No hay palabras para los filtros actuales de Catalogo.'));
+        setExerciseSourceNotice(tx('source_catalog_empty', 'There are no words for the current catalog filters.'));
       }
     } else if (sourceType === 'saved' && count < 4) {
-      setExerciseSourceNotice(tx('mix_needs_four_words', 'Desafio se activa cuando esta lista tenga al menos 4 palabras.'));
+      setExerciseSourceNotice(tx('mix_needs_four_words', 'Challenge mode is enabled when this list has at least 4 words.'));
     } else {
       setExerciseSourceNotice('');
     }
@@ -607,8 +857,8 @@
       if (level === 'B2' || level === 'C1') return '▮▮▮▮▯ ' + level;
       return '▮▮▮▮▮ ' + level;
     };
-    levelSelect.innerHTML = '<option value="">' + tx('all_levels', 'Todos los niveles') + '</option>' + catalogSource.levels.map(level => '<option value="' + level + '">' + levelOptionLabel(level) + '</option>').join('');
-    topicSelect.innerHTML = '<option value="">' + tx('all_categories', 'Todas las categorias') + '</option>' + getTopicOptions().map(topic => '<option value="' + topic.value + '">' + topic.label + '</option>').join('');
+    levelSelect.innerHTML = '<option value="">' + resolveUiChoiceLabel('all_levels', 'All levels') + '</option>' + catalogSource.levels.map(level => '<option value="' + level + '">' + levelOptionLabel(level) + '</option>').join('');
+    topicSelect.innerHTML = '<option value="">' + resolveUiChoiceLabel('all_categories', 'All categories') + '</option>' + getTopicOptions().map(topic => '<option value="' + topic.value + '">' + getTopicLabel(topic.value) + '</option>').join('');
 
     levelSelect.value = catalogSource.selectedLevel;
     topicSelect.value = catalogSource.selectedTopic;
@@ -632,7 +882,7 @@
     const options = [library, ...collections];
     const allCount = aggregateSavedItems(library, collections).length;
 
-    select.innerHTML = '<option value="all_saved">' + tx('all_collections', 'Todas las colecciones') + ' (' + allCount + ')</option>' + options.map(source => {
+    select.innerHTML = '<option value="all_saved">' + resolveUiChoiceLabel('all_collections', 'All collections') + ' (' + allCount + ')</option>' + options.map(source => {
       const count = source.items.length;
       const label = source.name + ' (' + count + ')';
       return '<option value="' + String(source.id) + '">' + label + '</option>';
@@ -660,7 +910,7 @@
     syncSourcePanels();
     setupExerciseCatalogSelects();
     setupExerciseCollectionSelect();
-    await loadVocabularySources(t('loading_options'), true, forceReloadSources);
+    await loadVocabularySources(resolveExerciseRuntimeTextRelaxed('loading_options', uiFallback('loading_options', 'Loading options...')), true, forceReloadSources);
     setupExerciseCatalogSelects();
     setupExerciseCollectionSelect();
     syncSourcePanels();
@@ -726,17 +976,13 @@
   }
 
   function buildCustomWritingItems(items, difficultyLevel = 'B1') {
-    const prompt = ['A1', 'A2'].includes(difficultyLevel)
-      ? 'Write one natural sentence in English for this situation.'
-      : ['B1', 'B2'].includes(difficultyLevel)
-        ? 'Write one polished sentence in English. Keep the original meaning and tone.'
-        : 'Write one precise C-level sentence in English. Keep meaning, register, and lexical accuracy.';
+    const prompt = resolveExerciseRuntimeTextRelaxed('translate_to_english', uiFallback('translate_to_english', 'Translate to English.'));
 
     return items
       .map(item => ({
         type: 'translate',
         prompt,
-        sentence: `${buildWritingScenario(formatTopicLabel(item.topic), difficultyLevel)} Context source: "${item.translation || item.meaning || ''}"`,
+        sentence: sanitizeRuntimeText(item.translation || item.meaning || ''),
         answer: item.text || item.word || '',
       }))
       .filter(item => item.sentence && item.answer)
@@ -744,22 +990,16 @@
   }
 
   function buildCustomListeningItems(items, difficultyLevel = 'B1') {
-    const question = ['A1', 'A2'].includes(difficultyLevel)
-      ? 'Listen and type the missing expression.'
-      : 'Type the exact expression you hear.';
+    const question = resolveExerciseRuntimeTextRelaxed('listening_question_default', uiFallback('listening_question_default', 'Listen and type the missing expression.'));
 
     return items
       .filter(item => item.text && item.translation)
       .slice(0, 3)
       .map(item => ({
         type: 'fillin',
-        transcript: ['C1', 'C2'].includes(difficultyLevel)
-          ? `Professional briefing (${String(formatTopicLabel(item.topic)).toLowerCase()}): "Before the panel review, each candidate is expected to ${item.text} to ensure consistency, precision, and register control."`
-          : ['A1', 'A2'].includes(difficultyLevel)
-            ? `Audio note (${String(formatTopicLabel(item.topic)).toLowerCase()}): "Before we begin, please ${item.text} and then sit near the front."`
-            : `Team voice message (${String(formatTopicLabel(item.topic)).toLowerCase()}): "Before the review starts, everyone should ${item.text} so the discussion stays focused."`,
+        transcript: String(item.text || ''),
         question,
-        sentence: `In the ${String(formatTopicLabel(item.topic)).toLowerCase()} recording, the speaker says we should ________ before the next step.`,
+        sentence: '______',
         answer: item.text,
       }));
   }
@@ -817,7 +1057,7 @@
 
     return [{
       type: 'match',
-      question: tx('matching_question', 'Match the pairs as fast as possible. Faster time means better score.'),
+      question: resolveExerciseRuntimeTextRelaxed('matching_question', uiFallback('matching_question', 'Match the pairs as fast as possible.')),
       pairs,
       time_limit_seconds: Math.max(35, Math.min(95, pairs.length * timePerPair)),
     }];
@@ -836,7 +1076,7 @@
 
     return [{
       type: 'memory',
-      question: tx('memory_question', 'Memory Matrix: find all translation pairs with the fewest moves.'),
+      question: resolveExerciseRuntimeTextRelaxed('memory_question', uiFallback('memory_question', 'Find all translation pairs with the fewest moves.')),
       pairs,
       grid_columns: pairs.length >= 12 ? 6 : 4,
       preview_ms: previewMs,
@@ -1238,7 +1478,7 @@
   }
 
   function updateExerciseModeLabels() {
-    const lang = getActiveLang();
+    const lang = getUiLocale();
     const labels = resolveModeLabelsForLanguage(lang);
     document.querySelectorAll('.exercise-card[data-mode]').forEach(card => {
       const idx = BADGE_MODES.indexOf(card.dataset.mode);
@@ -1254,7 +1494,7 @@
     initSpeechVoices();
     primeUiAudio();
     const setGlobalLoading = typeof window.lexiSetPageLoading === 'function' ? window.lexiSetPageLoading : null;
-    const loadingLabel = tx('loading_options', 'Cargando opciones...');
+    const loadingLabel = resolveExerciseRuntimeTextRelaxed('loading_options', uiFallback('loading_options', 'Loading options...'));
 
     if (setGlobalLoading) {
       setGlobalLoading(true, loadingLabel);
@@ -1288,7 +1528,7 @@
 
   window.addEventListener('lexi-lang-changed', async () => {
     updateExerciseModeLabels();
-    await loadVocabularySources(t('loading_options'), false, true);
+    await loadVocabularySources(resolveExerciseRuntimeTextRelaxed('loading_options', uiFallback('loading_options', 'Loading options...')), false, true);
     setupExerciseCatalogSelects();
     setupExerciseCollectionSelect();
     syncSourcePanels();
@@ -1297,7 +1537,7 @@
   window.addEventListener('pageshow', async (event) => {
     if (!event.persisted) return;
     const setGlobalLoading = typeof window.lexiSetPageLoading === 'function' ? window.lexiSetPageLoading : null;
-    const loadingLabel = tx('loading_options', 'Cargando opciones...');
+    const loadingLabel = resolveExerciseRuntimeTextRelaxed('loading_options', uiFallback('loading_options', 'Loading options...'));
 
     if (setGlobalLoading) {
       setGlobalLoading(true, loadingLabel);
@@ -1344,23 +1584,23 @@
       items: [
         {
           type: "fillin",
-          transcript: "Good morning everyone. Today's meeting has been moved from the main conference room to room 204 on the second floor. We will start at half past nine instead of nine o'clock. Please bring your project updates.",
-          question: t('complete_sentence'),
-          sentence: "Today's meeting has been moved to room 204 on the ________ floor.",
+          transcript: "second",
+          question: resolveExerciseRuntimeTextRelaxed('listening_question_default', uiFallback('listening_question_default', 'Listen and type the missing expression.')),
+          sentence: "______",
           answer: "second"
         },
         {
           type: "fillin",
-          transcript: "Welcome to the Lexi podcast. Today we're going to talk about the importance of vocabulary in language learning. Studies show that knowing the most common two thousand words in a language allows you to understand about eighty percent of everyday conversations.",
-          question: t('complete_sentence'),
-          sentence: "Knowing the most common two thousand words allows you to understand about ________ percent of everyday conversations.",
+          transcript: "eighty",
+          question: resolveExerciseRuntimeTextRelaxed('listening_question_default', uiFallback('listening_question_default', 'Listen and type the missing expression.')),
+          sentence: "______",
           answer: "eighty"
         },
         {
           type: "fillin",
-          transcript: "The flight to London has been delayed by approximately forty minutes due to heavy fog at the destination airport. Passengers are advised to remain in the departure lounge and listen for further announcements.",
-          question: t('complete_sentence'),
-          sentence: "The flight has been delayed due to heavy ________ at the destination airport.",
+          transcript: "fog",
+          question: resolveExerciseRuntimeTextRelaxed('listening_question_default', uiFallback('listening_question_default', 'Listen and type the missing expression.')),
+          sentence: "______",
           answer: "fog"
         }
       ]
@@ -1399,11 +1639,11 @@
       ]
     },
     mix: {
-      title: tx('challenge_label', 'Desafio'),
+      title: tx('challenge_label', 'Challenge'),
       items: [
         {
           type: 'match',
-          question: 'Match the pairs as fast as possible. Faster time means better score.',
+          question: resolveExerciseRuntimeTextRelaxed('matching_question', uiFallback('matching_question', 'Match the pairs as fast as possible.')),
           time_limit_seconds: 60,
           pairs: [
             { left: 'deadline', right: 'plazo de entrega' },
@@ -1416,7 +1656,7 @@
         },
         {
           type: 'memory',
-          question: 'Memory Matrix: find all translation pairs with the fewest moves.',
+          question: resolveExerciseRuntimeTextRelaxed('memory_question', uiFallback('memory_question', 'Find all translation pairs with the fewest moves.')),
           grid_columns: 4,
           preview_ms: 900,
           pairs: [
@@ -1450,15 +1690,15 @@
     const content = document.getElementById('exerciseContent');
     const nav = document.getElementById('exNavBtns');
     document.getElementById('exPanelTitle').textContent = title;
-    document.getElementById('exProgress').textContent = tx('loading_short', 'Cargando...');
+    document.getElementById('exProgress').textContent = '';
     document.getElementById('exProgressBar').style.width = '12%';
     document.getElementById('btnNextEx').disabled = true;
-    document.getElementById('btnNextEx').innerHTML = tx('skip', 'Saltar') + ' <i class="bi bi-arrow-right"></i>';
+    document.getElementById('btnNextEx').innerHTML = te('next', tx('skip', 'Skip')) + ' <i class="bi bi-arrow-right"></i>';
     if (nav) nav.hidden = true;
     content.innerHTML =
       '<div class="ex-loading-state" role="status" aria-live="polite">' +
       '<span class="ex-loading-spinner" aria-hidden="true"></span>' +
-      '<span class="ex-loading-text">' + tx('loading_exercise', 'Preparando ejercicios...') + '</span>' +
+        '<span class="ex-loading-text">' + resolveExerciseRuntimeTextRelaxed('loading_exercise', te('loading_options', uiFallback('loading_exercise', ''))) + '</span>' +
       '</div>';
   }
 
@@ -1488,7 +1728,7 @@
       return;
     }
 
-    btnNext.innerHTML = tx('skip', 'Saltar') + ' <i class="bi bi-arrow-right"></i>';
+    btnNext.innerHTML = te('next', tx('skip', 'Skip')) + ' <i class="bi bi-arrow-right"></i>';
   }
 
   function getRuntimeSelectionContext() {
@@ -1543,7 +1783,7 @@
     }
 
     return {
-      title: payload.title || EXERCISES[mode].title,
+      title: sanitizeRuntimeText(payload.title || EXERCISES[mode].title),
       items: payload.items,
     };
   }
@@ -1552,16 +1792,16 @@
     const content = document.getElementById('exerciseContent');
     const nav = document.getElementById('exNavBtns');
     document.getElementById('exPanelTitle').textContent = title;
-    document.getElementById('exProgress').textContent = tx('not_available_short', 'No disponible');
+    document.getElementById('exProgress').textContent = resolveExerciseRuntimeText('not_available_short');
     document.getElementById('exProgressBar').style.width = '0%';
     document.getElementById('btnNextEx').disabled = true;
-    document.getElementById('btnNextEx').innerHTML = tx('skip', 'Saltar') + ' <i class="bi bi-arrow-right"></i>';
+    document.getElementById('btnNextEx').innerHTML = te('next', tx('skip', 'Skip')) + ' <i class="bi bi-arrow-right"></i>';
     if (nav) nav.hidden = true;
 
     content.innerHTML =
       '<div class="ex-feedback ex-feedback--warn" style="display:block">' +
       '<i class="bi bi-exclamation-triangle-fill"></i> ' +
-      String(reason || tx('ai_generation_failed', 'No se pudo generar un ejercicio de calidad con IA para esta selección.')) +
+      String(reason || tx('ai_generation_failed', 'A high-quality AI exercise could not be generated for this selection.')) +
       '</div>';
   }
 
@@ -1618,7 +1858,7 @@
     const needsAiRuntime = aiFirstModes.includes(mode);
 
     if (needsAiRuntime) {
-      await loadVocabularySources(t('loading_options'), true);
+      await loadVocabularySources(resolveExerciseRuntimeTextRelaxed('loading_options', uiFallback('loading_options', 'Loading options...')), true);
     }
 
     stopSpeechAudio();
@@ -1646,7 +1886,7 @@
       currentIndex = 0;
       document.getElementById('btnNextEx').disabled = false;
       renderExercise();
-      loadVocabularySources(t('loading_options'), false).catch(() => {});
+      loadVocabularySources(resolveExerciseRuntimeTextRelaxed('loading_options', uiFallback('loading_options', 'Loading options...')), false).catch(() => {});
       return;
     }
 
@@ -1944,14 +2184,14 @@
   bootstrapExercises();
 
   function parseReadingPassage(passage) {
-    const raw = String(passage || '').trim();
+    const raw = sanitizeRuntimeText(passage);
     if (!raw) {
       return { scenario: '', sentence: '' };
     }
 
     const parts = raw.match(/^(.*?)\.\s*Sentence:\s*(.+)$/i);
     if (!parts) {
-      return { scenario: raw, sentence: '' };
+      return { scenario: '', sentence: raw };
     }
 
     return {
@@ -2085,7 +2325,7 @@
       return fromQuestion;
     }
 
-    return 'Listen and complete the sentence.';
+    return resolveExerciseRuntimeText('listening_question_default');
   }
 
   function sanitizeListeningQuestion(questionText, answerText, baseText = '') {
@@ -2122,13 +2362,13 @@
     };
 
     if (normalizedQuestion === '') {
-      return tx('listening_question_default', 'Listen and type the missing expression.');
+      return resolveExerciseRuntimeText('listening_question_default');
     }
 
     // If the question already includes a blank placeholder, show a short prompt
     // and let the sentence-with-gap below carry the actual text.
     if (gapRegex.test(normalizedQuestion)) {
-      return tx('listening_question_default', 'Listen and type the missing expression.');
+      return resolveExerciseRuntimeText('listening_question_default');
     }
 
     const comparableQuestion = simplifyComparableText(normalizedQuestion, normalizedAnswer);
@@ -2142,7 +2382,7 @@
         comparableBase.includes(comparableQuestion)
       )
     ) {
-      return tx('listening_question_default', 'Listen and type the missing expression.');
+      return resolveExerciseRuntimeText('listening_question_default');
     }
 
     if (normalizedAnswer === '') {
@@ -2153,7 +2393,7 @@
     const answerRegex = new RegExp(escapedAnswer, 'i');
 
     if (answerRegex.test(normalizedQuestion)) {
-      return tx('listening_question_default', 'Listen and type the missing expression.');
+      return resolveExerciseRuntimeText('listening_question_default');
     }
 
     return normalizedQuestion;
@@ -2201,17 +2441,26 @@
   }
 
   function renderMCQ(container, item) {
-    const readingView = parseReadingPassage(item.passage);
-    const scenarioHtml = readingView.scenario ? '<div class="ex-passage-meta"><span class="ex-passage-chip"><i class="bi bi-journal-text"></i> Scenario</span><span class="ex-passage-context"> · ' + readingView.scenario + '</span></div>' : '';
-    const sentenceHtml = readingView.sentence ? '<div class="ex-passage ex-passage--sentence">' + readingView.sentence + '</div>' : '<div class="ex-passage">' + item.passage + '</div>';
+    const targetLanguage = String(getActiveLang() || 'en').toLowerCase().split('-')[0];
+    const readingView = parseReadingPassage(sanitizeRuntimeText(item.passage));
+    const safeReadingLabel = sanitizeRuntimeText(t('reading_label'));
+    const safeScenarioTitle = sanitizeRuntimeText(tx('context_label', 'Context'));
+    const fallbackQuestion = sanitizeRuntimeText(tx('select_correct_answer', 'Select the correct answer.'));
+    const rawQuestion = sanitizeRuntimeText(item.question || '');
+    const normalizedQuestion = (targetLanguage !== 'en' && isLikelyEnglishRuntimeText(rawQuestion))
+      ? fallbackQuestion
+      : (rawQuestion || fallbackQuestion);
+    const scenarioHtml = readingView.scenario ? '<div class="ex-passage-meta"><span class="ex-passage-chip"><i class="bi bi-journal-text"></i> ' + safeScenarioTitle + '</span><span class="ex-passage-context"> · ' + sanitizeRuntimeText(readingView.scenario) + '</span></div>' : '';
+    const sentenceHtml = readingView.sentence ? '<div class="ex-passage ex-passage--sentence">' + sanitizeRuntimeText(readingView.sentence) + '</div>' : '<div class="ex-passage">' + sanitizeRuntimeText(item.passage) + '</div>';
+    const safeOptions = Array.isArray(item.options) ? item.options.map(opt => sanitizeRuntimeText(opt)) : [];
 
     container.innerHTML =
-      '<p class="ex-type-label"><i class="bi bi-book"></i> ' + t('reading_label') + '</p>' +
+      '<p class="ex-type-label"><i class="bi bi-book"></i> ' + safeReadingLabel + '</p>' +
       scenarioHtml +
       sentenceHtml +
-      '<p class="ex-question">' + item.question + '</p>' +
+      '<p class="ex-question">' + normalizedQuestion + '</p>' +
       '<div class="ex-options">' +
-      item.options.map((opt, i) =>
+      safeOptions.map((opt, i) =>
         '<button class="ex-option" data-idx="' + i + '">' +
         '<span class="ex-option-letter">' + String.fromCharCode(65 + i) + '</span>' + opt +
         '</button>'
@@ -2232,25 +2481,25 @@
           markExerciseItemResult(container, true, {
             itemId: item.itemId,
             itemType: item.type,
-            prompt: item.question,
-            expectedAnswer: item.options[item.correct],
-            answerText: item.options[idx],
-            answerPayload: { selected_index: idx, selected_option: item.options[idx] },
+            prompt: normalizedQuestion,
+            expectedAnswer: safeOptions[item.correct],
+            answerText: safeOptions[idx],
+            answerPayload: { selected_index: idx, selected_option: safeOptions[idx] },
             feedback: t('correct'),
           });
         } else {
           this.classList.add('ex-option--wrong');
           container.querySelectorAll('.ex-option')[item.correct].classList.add('ex-option--correct');
           playIncorrectFeedback(item.type);
-          feedback.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + t('incorrect_reference', { answer: '<strong>' + item.options[item.correct] + '</strong>' });
+          feedback.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + t('incorrect_reference', { answer: '<strong>' + safeOptions[item.correct] + '</strong>' });
           feedback.className = 'ex-feedback ex-feedback--err';
           markExerciseItemResult(container, false, {
             itemId: item.itemId,
             itemType: item.type,
-            prompt: item.question,
-            expectedAnswer: item.options[item.correct],
-            answerText: item.options[idx],
-            answerPayload: { selected_index: idx, selected_option: item.options[idx] },
+            prompt: normalizedQuestion,
+            expectedAnswer: safeOptions[item.correct],
+            answerText: safeOptions[idx],
+            answerPayload: { selected_index: idx, selected_option: safeOptions[idx] },
             feedback: t('incorrect'),
           });
         }
@@ -2260,10 +2509,20 @@
   }
 
   function renderFillin(container, item) {
-    const listeningBaseText = resolveListeningBaseText(item);
+    const uiLanguage = getUiLocale();
+    const listeningBaseTextRaw = resolveListeningBaseText(item);
+    const listeningBaseText = (uiLanguage !== 'en' && isLikelyEnglishRuntimeText(listeningBaseTextRaw))
+      ? sanitizeRuntimeText(item.answer || '')
+      : listeningBaseTextRaw;
     const listeningAnswerText = String(item.answer || '').trim();
-    const listeningQuestion = sanitizeListeningQuestion(item.question, listeningAnswerText, listeningBaseText);
-    const listeningSentenceText = resolveListeningSentenceForGap(listeningBaseText, item.question);
+    const listeningQuestionRaw = sanitizeListeningQuestion(item.question, listeningAnswerText, listeningBaseText);
+    const listeningQuestion = (uiLanguage !== 'en' && isLikelyEnglishRuntimeText(listeningQuestionRaw))
+      ? resolveExerciseRuntimeTextRelaxed('listening_question_default', uiFallback('listening_question_default', 'Listen and type the missing expression.'))
+      : listeningQuestionRaw;
+    const listeningSentenceTextRaw = resolveListeningSentenceForGap(listeningBaseText, item.question);
+    const listeningSentenceText = (uiLanguage !== 'en' && isLikelyEnglishRuntimeText(listeningSentenceTextRaw))
+      ? '______'
+      : listeningSentenceTextRaw;
     const expectedAnswerLength = Math.max(4, String(item.answer || '').trim().length || 4);
     const inputWidthCh = Math.max(6, Math.min(34, expectedAnswerLength + 2));
     const inputHtml = '<input class="ex-input" type="text" autocomplete="off" spellcheck="false" style="width:' + inputWidthCh + 'ch">';
@@ -2442,7 +2701,7 @@
       '<div class="ex-word-big">' + item.word + '</div>' +
       '<p class="ex-hint-text">' + item.hint + '</p>' +
       '<div class="ex-mic-area">' +
-      '<button class="ex-mic-btn" id="micBtn"><i class="bi bi-mic"></i><span>' + t('press_to_speak') + '</span></button>' +
+      '<button class="ex-mic-btn" id="micBtn" aria-label="' + t('speaking_label') + '"><i class="bi bi-mic"></i></button>' +
       '</div>' +
       '<div class="ex-self-check" hidden>' +
       '<p>' + t('self_check_question') + '</p>' +
@@ -2457,15 +2716,12 @@
     micBtn.addEventListener('click', function () {
       this.classList.toggle('recording');
       const icon = this.querySelector('i');
-      const label = this.querySelector('span');
       if (this.classList.contains('recording')) {
         playUiTone('neutral');
         icon.className = 'bi bi-stop-fill';
-        label.textContent = t('recording');
       } else {
         playUiTone('neutral');
         icon.className = 'bi bi-mic';
-        label.textContent = t('press_to_speak');
         selfCheck.hidden = false;
       }
     });
@@ -2487,16 +2743,40 @@
       selfCheck.hidden = true;
       micBtn.classList.remove('recording');
       micBtn.querySelector('i').className = 'bi bi-mic';
-      micBtn.querySelector('span').textContent = t('press_to_speak');
     });
   }
 
   function renderTranslate(container, item) {
+    const uiLanguage = getUiLocale();
+    const rawPrompt = sanitizeRuntimeText(item.prompt || '');
+    const rawSentence = sanitizeRuntimeText(item.sentence || '');
+    const extractedContext = (() => {
+      const quotedMatch = rawSentence.match(/context source:\s*"([^"]+)"/i);
+      if (quotedMatch && quotedMatch[1]) return sanitizeRuntimeText(quotedMatch[1]);
+      const plainMatch = rawSentence.match(/context source:\s*(.+)$/i);
+      if (plainMatch && plainMatch[1]) return sanitizeRuntimeText(plainMatch[1]);
+      return rawSentence;
+    })();
+    const writingPrompt = (() => {
+      if (uiLanguage !== 'en' && isLikelyEnglishRuntimeText(rawPrompt)) {
+        return resolveExerciseRuntimeTextRelaxed('translate_to_english', uiFallback('translate_to_english', rawPrompt || 'Translate to English.'));
+      }
+      if (rawPrompt) return rawPrompt;
+      return resolveExerciseRuntimeTextRelaxed('translate_to_english', uiFallback('translate_to_english', 'Translate to English.'));
+    })();
+    const writingSentence = (() => {
+      if (uiLanguage !== 'en' && isLikelyEnglishRuntimeText(rawSentence)) {
+        return extractedContext || rawSentence;
+      }
+      return rawSentence;
+    })();
+    const writingPlaceholder = resolveExerciseRuntimeTextRelaxed('write_placeholder', uiFallback('write_placeholder', ''));
+
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-pencil"></i> ' + t('writing_label') + '</p>' +
-      '<p class="ex-prompt">' + item.prompt + '</p>' +
-      '<div class="ex-sentence-box">' + item.sentence + '</div>' +
-      '<textarea class="ex-textarea" placeholder="Escribe tu traducción aquí..."></textarea>' +
+      '<p class="ex-prompt">' + writingPrompt + '</p>' +
+      '<div class="ex-sentence-box">' + writingSentence + '</div>' +
+      '<textarea class="ex-textarea" placeholder="' + writingPlaceholder + '"></textarea>' +
       '<button class="btn btn-outline-secondary ex-check-btn">' + t('check') + '</button>' +
       '<div class="ex-feedback" hidden></div>';
 
@@ -2512,7 +2792,7 @@
         markExerciseItemResult(container, true, {
           itemId: item.itemId,
           itemType: item.type,
-          prompt: item.sentence,
+          prompt: writingSentence,
           expectedAnswer: item.answer,
           answerText: val,
           feedback: t('correct'),
@@ -2528,7 +2808,7 @@
         markExerciseItemResult(container, false, {
           itemId: item.itemId,
           itemType: item.type,
-          prompt: item.sentence,
+          prompt: writingSentence,
           expectedAnswer: item.answer,
           answerText: val,
           feedback: t('incorrect'),
@@ -2543,24 +2823,24 @@
     const hintText = item.hint ? '<span class="ex-flashcard-hint">' + item.hint + '</span>' : '';
 
     container.innerHTML =
-      '<p class="ex-type-label"><i class="bi bi-layers"></i> ' + tx('flashcards_label', 'Tarjetas rapidas') + '</p>' +
-      '<p class="ex-question">' + tx('flashcards_instruction', 'Mira la traduccion un instante, se tapa y marca si la recordaste.') + '</p>' +
+      '<p class="ex-type-label"><i class="bi bi-layers"></i> ' + tx('flashcards_label', 'Flashcards') + '</p>' +
+      '<p class="ex-question">' + tx('flashcards_instruction', 'View the translation briefly, then decide if you remembered it.') + '</p>' +
       '<div class="ex-flashcard" data-visible="0">' +
         '<div class="ex-flashcard-face ex-flashcard-face--front">' + item.front + '</div>' +
         '<div class="ex-flashcard-face ex-flashcard-face--back" hidden>' + item.back + '</div>' +
       '</div>' +
       '<div class="ex-flashcard-meta">' +
-        '<span class="ex-flashcard-timer">' + tx('flashcards_reveal_label', 'Vista') + ': ' + Math.round(revealMs / 1000) + 's</span>' +
+        '<span class="ex-flashcard-timer">' + tx('flashcards_reveal_label', 'Reveal') + ': ' + Math.round(revealMs / 1000) + 's</span>' +
         hintText +
       '</div>' +
       '<div class="ex-flashcard-actions">' +
-        '<button class="btn btn-primary ex-flashcard-show">' + tx('flashcards_show', 'Mostrar 1 segundo') + '</button>' +
+        '<button class="btn btn-primary ex-flashcard-show">' + tx('flashcards_show', 'Show for 1 second') + '</button>' +
       '</div>' +
       '<div class="ex-self-check" hidden>' +
-        '<p>' + tx('flashcards_remembered_question', '¿La recordaste sin mirar otra vez?') + '</p>' +
+        '<p>' + tx('flashcards_remembered_question', 'Did you remember it without looking again?') + '</p>' +
         '<div class="ex-self-check-btns">' +
-          '<button class="btn btn-success ex-flashcard-yes"><i class="bi bi-check-lg"></i> ' + tx('flashcards_yes', 'Si, la sabia') + '</button>' +
-          '<button class="btn btn-outline-danger ex-flashcard-no">' + tx('flashcards_no', 'No, me costo') + '</button>' +
+          '<button class="btn btn-success ex-flashcard-yes"><i class="bi bi-check-lg"></i> ' + tx('flashcards_yes', 'Yes, I knew it') + '</button>' +
+          '<button class="btn btn-outline-danger ex-flashcard-no">' + tx('flashcards_no', 'No, it was hard') + '</button>' +
         '</div>' +
       '</div>';
 
@@ -2594,9 +2874,9 @@
         expectedAnswer: item.back,
         answerText: item.front,
         answerPayload: { remembered: true, reveal_ms: revealMs },
-        feedback: tx('correct', 'Correcto!'),
+        feedback: tx('correct', 'Correct!'),
       });
-      selfCheck.innerHTML = '<p class="ex-feedback ex-feedback--ok" style="display:block"><i class="bi bi-check-circle-fill"></i> ' + tx('flashcards_success', 'Perfecto, seguimos.') + '</p>';
+      selfCheck.innerHTML = '<p class="ex-feedback ex-feedback--ok" style="display:block"><i class="bi bi-check-circle-fill"></i> ' + tx('flashcards_success', 'Great, keep going.') + '</p>';
     });
 
     container.querySelector('.ex-flashcard-no').addEventListener('click', () => {
@@ -2607,9 +2887,9 @@
         expectedAnswer: item.back,
         answerText: null,
         answerPayload: { remembered: false, reveal_ms: revealMs },
-        feedback: tx('incorrect', 'Incorrecto'),
+        feedback: tx('incorrect', 'Incorrect'),
       });
-      selfCheck.innerHTML = '<p class="ex-feedback ex-feedback--warn" style="display:block"><i class="bi bi-arrow-repeat"></i> ' + tx('flashcards_retry_hint', 'Repite esta tarjeta al final para fijarla mejor.') + '</p>';
+      selfCheck.innerHTML = '<p class="ex-feedback ex-feedback--warn" style="display:block"><i class="bi bi-arrow-repeat"></i> ' + tx('flashcards_retry_hint', 'Repeat this card later to reinforce memory.') + '</p>';
     });
   }
 
@@ -2633,12 +2913,16 @@
     let selectedLeftButton = null;
     let selectedRightButton = null;
 
+    const matchingQuestion = resolveExerciseRuntimeTextRelaxed('matching_question', sanitizeRuntimeText(item.question || uiFallback('matching_question', '')));
+    const pairsLabel = resolveExerciseRuntimeTextRelaxed('matching_pairs', resolveExerciseRuntimeTextRelaxed('pairs_label', uiFallback('pairs_label', 'Pairs')));
+    const matchingLabel = resolveExerciseRuntimeTextRelaxed('matching_label', resolveExerciseRuntimeTextRelaxed('challenge_mode', resolveExerciseRuntimeTextRelaxed('challenge_label', uiFallback('matching_label', 'Challenge'))));
+
     container.innerHTML =
-      '<p class="ex-type-label"><i class="bi bi-bezier2"></i> ' + tx('matching_label', 'Conectar columnas') + '</p>' +
-      '<p class="ex-question">' + (item.question || tx('matching_question', 'Conecta cada palabra con su traduccion correcta')) + '</p>' +
+      '<p class="ex-type-label"><i class="bi bi-bezier2"></i> ' + matchingLabel + '</p>' +
+      '<p class="ex-question">' + matchingQuestion + '</p>' +
       '<div class="ex-game-meta">' +
         '<span class="ex-game-chip"><i class="bi bi-stopwatch"></i> <strong class="ex-match-timer">' + timeLimitSeconds + 's</strong></span>' +
-        '<span class="ex-game-chip"><i class="bi bi-lightning-charge"></i> ' + tx('matching_pairs', 'Pairs') + ': <strong class="ex-match-count">0/' + totalPairs + '</strong></span>' +
+        '<span class="ex-game-chip"><i class="bi bi-lightning-charge"></i> ' + (pairsLabel ? (pairsLabel + ': ') : '') + '<strong class="ex-match-count">0/' + totalPairs + '</strong></span>' +
       '</div>' +
       '<div class="ex-matching-board">' +
         '<div class="ex-matching-column" data-column="left"></div>' +
@@ -2690,11 +2974,11 @@
       disableBoard();
 
       if (timedOut) {
-        feedback.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + tx('matching_timeout', 'Time is over. Try again to beat the clock.');
+        feedback.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + resolveExerciseRuntimeTextRelaxed('matching_timeout', uiFallback('matching_timeout', 'Time is over. Try again to beat the clock.'));
         feedback.className = 'ex-feedback ex-feedback--warn';
       } else if (success) {
         playUiTone('success');
-        feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + tx('matching_success', 'Great speed. Challenge completed.');
+        feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + resolveExerciseRuntimeTextRelaxed('matching_success', uiFallback('matching_success', 'Great speed. Challenge completed.'));
         feedback.className = 'ex-feedback ex-feedback--trophy';
       }
 
@@ -2707,7 +2991,7 @@
         answerText: JSON.stringify(solvedPairs),
         answerPayload: { mistakes, score, elapsed_seconds: elapsedSeconds, timed_out: timedOut },
         pointsObtained: score / 100,
-        feedback: success ? tx('correct', 'Correcto!') : tx('incorrect', 'Incorrecto'),
+        feedback: success ? tx('correct', 'Correct!') : tx('incorrect', 'Incorrect'),
       });
     };
 
@@ -2846,12 +3130,17 @@
     const matchedPairs = new Set();
     const startedAt = Date.now();
 
+    const memoryQuestion = resolveExerciseRuntimeTextRelaxed('memory_question', sanitizeRuntimeText(item.question || uiFallback('memory_question', '')));
+    const movesLabel = resolveExerciseRuntimeTextRelaxed('moves_label', uiFallback('moves_label', 'Moves'));
+    const pairsLabel = resolveExerciseRuntimeTextRelaxed('pairs_label', resolveExerciseRuntimeTextRelaxed('matching_pairs', uiFallback('pairs_label', 'Pairs')));
+    const memoryLabel = resolveExerciseRuntimeTextRelaxed('memory_label', resolveExerciseRuntimeTextRelaxed('memory_mode', resolveExerciseRuntimeTextRelaxed('practice_label', uiFallback('memory_label', 'Memory'))));
+
     container.innerHTML =
-      '<p class="ex-type-label"><i class="bi bi-grid-3x3-gap"></i> ' + tx('memory_label', 'Memory Matrix') + '</p>' +
-      '<p class="ex-question">' + (item.question || tx('memory_question', 'Find all translation pairs with the fewest moves.')) + '</p>' +
+      '<p class="ex-type-label"><i class="bi bi-grid-3x3-gap"></i> ' + memoryLabel + '</p>' +
+      '<p class="ex-question">' + memoryQuestion + '</p>' +
       '<div class="ex-game-meta">' +
-        '<span class="ex-game-chip"><i class="bi bi-arrows-move"></i> ' + tx('moves_label', 'Moves') + ': <strong class="ex-memory-moves">0</strong></span>' +
-        '<span class="ex-game-chip"><i class="bi bi-patch-check"></i> ' + tx('pairs_label', 'Pairs') + ': <strong class="ex-memory-count">0/' + pairs.length + '</strong></span>' +
+        '<span class="ex-game-chip"><i class="bi bi-arrows-move"></i> ' + (movesLabel ? (movesLabel + ': ') : '') + '<strong class="ex-memory-moves">0</strong></span>' +
+        '<span class="ex-game-chip"><i class="bi bi-patch-check"></i> ' + (pairsLabel ? (pairsLabel + ': ') : '') + '<strong class="ex-memory-count">0/' + pairs.length + '</strong></span>' +
       '</div>' +
       '<div class="ex-memory-board" style="--memory-cols:' + columns + '"></div>' +
       '<div class="ex-feedback" hidden></div>';
@@ -2929,7 +3218,7 @@
       if (success) {
         playUiTone('success');
       }
-      feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + tx('memory_success', 'All pairs completed. Great focus.');
+      feedback.innerHTML = '<i class="bi bi-trophy-fill"></i> ' + resolveExerciseRuntimeTextRelaxed('memory_success', uiFallback('memory_success', 'All pairs completed. Great focus.'));
       feedback.className = 'ex-feedback ex-feedback--trophy';
       feedback.hidden = false;
 
@@ -2941,7 +3230,7 @@
         answerText: JSON.stringify(Array.from(matchedPairs)),
         answerPayload: { moves, elapsed_seconds: elapsedSeconds, score },
         pointsObtained: score / 100,
-        feedback: tx('correct', 'Correcto!'),
+        feedback: tx('correct', 'Correct!'),
       });
     };
 
@@ -3044,10 +3333,10 @@
           '<img src="/images/ui/Confetti_Cannon.gif" alt="" loading="lazy" decoding="async">' +
         '</div>' +
         '<div class="ex-complete-content">' +
-          '<h2>' + tx('completed', '¡Seccion completada!') + '</h2>' +
+          '<h2>' + te('completed', tx('completed', 'Section completed!')) + '</h2>' +
           '<div class="ex-complete-actions" style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">' +
-            '<button class="btn btn-outline-secondary" id="btnRepeatInline">' + tx('repeat', 'Repetir') + '</button>' +
-            '<button class="btn btn-primary" id="btnBackInline">' + tx('choose_other_mode', 'Elegir otro modo') + '</button>' +
+            '<button class="btn btn-outline-secondary" id="btnRepeatInline">' + te('repeat', tx('repeat', 'Repeat')) + '</button>' +
+            '<button class="btn btn-primary" id="btnBackInline">' + te('choose_other_mode', tx('choose_other_mode', 'Choose another mode')) + '</button>' +
           '</div>' +
         '</div>' +
       '</section>';

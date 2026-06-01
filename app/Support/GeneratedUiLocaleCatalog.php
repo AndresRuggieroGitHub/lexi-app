@@ -36,10 +36,11 @@ class GeneratedUiLocaleCatalog
         }
 
         $lines = $this->loadCachedCatalog($locale);
+        $hasCompleteCatalog = is_array($lines) && $this->catalogCoversRequiredKeys($locale, $lines);
 
-        if ($lines === null && $this->shouldWarmAtRuntime($locale)) {
+        if (app()->runningInConsole() && config('lexi.ui_runtime_warm', false) && $this->shouldWarmAtRuntime($locale) && ! $hasCompleteCatalog) {
             try {
-                $this->warmLocale($locale);
+                $this->warmLocale($locale, $lines !== null);
                 $lines = $this->loadCachedCatalog($locale);
             } catch (Throwable $exception) {
                 Log::warning('Lexi UI locale runtime warmup failed.', [
@@ -49,12 +50,26 @@ class GeneratedUiLocaleCatalog
             }
         }
 
-        if (is_array($lines) && $lines !== []) {
-            $effectiveLines = $this->hasNativeCatalog($locale)
-                ? array_replace_recursive($this->nativeCatalog($locale), $lines)
-                : $lines;
+        $effectiveLines = is_array($lines) ? $lines : [];
 
-            $this->translator->addLines($this->flattenCatalog($effectiveLines), $locale);
+        if ($this->hasNativeCatalog($locale)) {
+            $effectiveLines = array_replace_recursive($this->nativeCatalog($locale), $effectiveLines);
+        }
+
+        $effectiveFlat = Arr::dot($effectiveLines);
+        $missingFlat = array_diff_key($this->requiredGeneratedFlat($locale), $effectiveFlat);
+
+        if ($missingFlat !== []) {
+            $effectiveFlat += $missingFlat;
+        }
+
+        if ($effectiveFlat !== []) {
+            $this->translator->addLines(
+                collect($effectiveFlat)
+                    ->mapWithKeys(fn (mixed $value, string $key): array => ['lexi.' . $key => (string) $value])
+                    ->all(),
+                $locale
+            );
         }
     }
 
@@ -64,7 +79,9 @@ class GeneratedUiLocaleCatalog
             return false;
         }
 
-        if (! $force && $this->loadCachedCatalog($locale) !== null) {
+        $cachedCatalog = $this->loadCachedCatalog($locale);
+
+        if (! $force && is_array($cachedCatalog) && $this->catalogCoversRequiredKeys($locale, $cachedCatalog)) {
             return false;
         }
 
@@ -177,6 +194,36 @@ class GeneratedUiLocaleCatalog
     /**
      * @return array<string, mixed>
      */
+    private function requiredGeneratedFlat(string $locale): array
+    {
+        $sourceFlat = Arr::dot($this->sourceCatalog());
+
+        if (! $this->hasNativeCatalog($locale)) {
+            return $sourceFlat;
+        }
+
+        $nativeFlat = Arr::dot($this->nativeCatalog($locale));
+
+        /** @var array<string, mixed> $sourceFlat */
+        return array_diff_key($sourceFlat, $nativeFlat);
+    }
+
+    private function catalogCoversRequiredKeys(string $locale, array $catalog): bool
+    {
+        $requiredFlat = $this->requiredGeneratedFlat($locale);
+
+        if ($requiredFlat === []) {
+            return true;
+        }
+
+        $catalogFlat = Arr::dot($catalog);
+
+        return array_diff_key($requiredFlat, $catalogFlat) === [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     private function sourceCatalog(): array
     {
         /** @var array<string, mixed> $source */
@@ -273,7 +320,17 @@ class GeneratedUiLocaleCatalog
         $translatedValues = [];
 
         foreach ($maskedValues as $maskedValue) {
-            $translatedValues[] = $translator->translate($maskedValue);
+            try {
+                $translatedValues[] = $translator->translate($maskedValue);
+            } catch (Throwable $exception) {
+                Log::warning('Lexi UI locale string translation failed. Falling back to source string.', [
+                    'target_locale' => $targetLocale,
+                    'chunk_index' => $chunkIndex,
+                    'message' => $exception->getMessage(),
+                ]);
+
+                $translatedValues[] = $maskedValue;
+            }
         }
 
         $restored = [];

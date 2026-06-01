@@ -132,7 +132,9 @@ class AuthController extends Controller
         }
 
         try {
-            $this->generatedUiLocaleCatalog->warmLocale($locale);
+            // Never perform remote translation warmup during auth requests.
+            // Loading local cached/native lines is fast and avoids login timeouts.
+            $this->generatedUiLocaleCatalog->loadLocale($locale);
         } catch (Throwable $exception) {
             Log::warning('Lexi UI locale warmup failed during auth flow.', [
                 'locale' => $locale,

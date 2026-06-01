@@ -148,7 +148,9 @@ class CoreBackendFlowsTest extends TestCase
     {
         $this->seedLanguages();
 
-        $catalogPath = storage_path('app/generated-ui-locales/fr.php');
+        $catalogPath = File::exists(lang_path('fr/lexi.php'))
+            ? storage_path('app/generated-ui-locales/supplements/fr.php')
+            : storage_path('app/generated-ui-locales/fr.php');
 
         File::ensureDirectoryExists(dirname($catalogPath));
         File::put($catalogPath, <<<'PHP'
@@ -156,13 +158,13 @@ class CoreBackendFlowsTest extends TestCase
 
 return [
     'common' => [
-        'skip_to_content' => 'Aller au contenu',
+        'skip_to_content' => 'Aller au contenu (cache)',
     ],
     'app' => [
-        'hero_title' => 'Apprenez les langues a votre rythme',
+        'hero_title' => 'Apprenez les langues a votre rythme (cache)',
     ],
     'js' => [
-        'loading' => 'Chargement...',
+        'loading' => 'Chargement... (cache)',
     ],
 ];
 PHP);
@@ -176,9 +178,9 @@ PHP);
 
             $response->assertOk();
             $response->assertSee('lang="fr"', false);
-            $response->assertSee('Aller au contenu');
-            $response->assertSee('Apprenez les langues a votre rythme');
-            $response->assertSee('Chargement...');
+            $response->assertSee('Aller au contenu (cache)');
+            $response->assertSee('Apprenez les langues a votre rythme (cache)');
+            $response->assertSee('Chargement... (cache)');
         } finally {
             File::delete($catalogPath);
         }
@@ -248,6 +250,49 @@ PHP);
         $response->assertSee('Підтвердити видалення');
         $response->assertSee('window.lexiTranslations', false);
         $response->assertSee('Ваш кошик порожній.');
+    }
+
+    public function test_non_spanish_locales_do_not_render_known_spanish_ui_leak_phrases(): void
+    {
+        $this->seedLanguages();
+
+        $user = User::factory()->create([
+            'mother_tongue_code' => 'fr',
+        ]);
+
+        $leakPhrases = [
+            'Anadir al carrito',
+            'Total del pedido',
+            'Tu carrito esta vacio. Anade un plan para continuar.',
+            'Importar desde catalogo',
+            'Todas las colecciones',
+            'Cargando opciones...',
+            'Seccion completada',
+        ];
+
+        foreach (config('lexi.ui_locales', []) as $locale) {
+            if (! is_string($locale) || $locale === '' || $locale === 'es') {
+                continue;
+            }
+
+            $user->forceFill([
+                'mother_tongue_code' => $locale,
+            ])->save();
+
+            $combined =
+                $this->actingAs($user)->get('/producto.html')->getContent() .
+                $this->actingAs($user)->get('/carrito.html')->getContent() .
+                $this->actingAs($user)->get('/biblioteca.html')->getContent() .
+                $this->actingAs($user)->get('/ejercicios.html')->getContent();
+
+            foreach ($leakPhrases as $phrase) {
+                $this->assertStringNotContainsString(
+                    $phrase,
+                    $combined,
+                    'Found Spanish UI leak phrase [' . $phrase . '] for locale [' . $locale . '].'
+                );
+            }
+        }
     }
 
     public function test_admin_analytics_page_uses_translated_strings_for_admin_locale(): void

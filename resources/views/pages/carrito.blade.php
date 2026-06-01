@@ -26,18 +26,18 @@
     </table>
   </div>
 
-  <section class="cart-checkout-panel mt-3" id="cartCheckoutPanel" aria-label="Acciones de pago" hidden>
+  <section class="cart-checkout-panel mt-3" id="cartCheckoutPanel" aria-label="{{ __('lexi.cart.checkout_actions_aria') }}" hidden>
     <div class="cart-checkout-panel__summary" aria-live="polite">
-      <span>Total del pedido</span>
+      <span>{{ __('lexi.cart.order_total') }}</span>
       <strong id="checkoutTotal">0 EUR</strong>
     </div>
     <div class="cart-checkout-panel__actions">
       <button id="clearCart" class="btn btn-outline-danger" type="button">{{ __('lexi.cart.clear') }}</button>
-      <button id="checkoutCart" class="btn btn-success" type="button" data-checkout-label="Pagar ahora">Pagar ahora</button>
+      <button id="checkoutCart" class="btn btn-success" type="button" data-checkout-label="{{ __('lexi.js.cart.pay_now') }}">{{ __('lexi.js.cart.pay_now') }}</button>
     </div>
     <p class="cart-checkout-panel__status d-none" id="checkoutStatus" role="status" aria-live="polite"></p>
   </section>
-  <p class="cart-empty-tip text-muted mt-2 mb-0" id="cartEmptyTip">Tu carrito está vacío. Añade un plan para continuar.</p>
+  <p class="cart-empty-tip text-muted mt-2 mb-0" id="cartEmptyTip">{{ __('lexi.cart.empty') }}</p>
 </main>
 
 <div class="modal fade" id="confirmRemoveModal" tabindex="-1" aria-hidden="true">
@@ -60,45 +60,45 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content payment-modal">
       <div class="modal-header">
-        <h2 class="h5 mb-0">Confirmar pago</h2>
-        <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        <h2 class="h5 mb-0">{{ __('lexi.cart.payment_confirm_title') }}</h2>
+        <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="{{ __('lexi.cart.close') }}"></button>
       </div>
       <div class="modal-body">
         <div class="payment-summary mb-3">
-          <p class="payment-summary__title mb-2">Resumen del pedido</p>
+          <p class="payment-summary__title mb-2">{{ __('lexi.cart.order_summary') }}</p>
           <div id="paymentSummaryItems"></div>
           <div class="payment-summary__total mt-2">
-            <span>Total</span>
+            <span>{{ __('lexi.cart.total') }}</span>
             <strong id="paymentSummaryTotal">0 EUR</strong>
           </div>
         </div>
 
         <div class="mb-3">
-          <label class="form-label" for="paymentFullName">Titular</label>
-          <input class="form-control" id="paymentFullName" type="text" placeholder="Nombre y apellidos" autocomplete="name">
+          <label class="form-label" for="paymentFullName">{{ __('lexi.cart.holder') }}</label>
+          <input class="form-control" id="paymentFullName" type="text" placeholder="{{ __('lexi.cart.holder_placeholder') }}" autocomplete="name">
         </div>
 
         <fieldset class="mb-3">
-          <legend class="form-label mb-2">Método de pago</legend>
+          <legend class="form-label mb-2">{{ __('lexi.cart.payment_method') }}</legend>
           <div class="payment-methods">
             <label class="payment-method-option">
               <input type="radio" name="paymentMethod" value="card" checked>
-              <span>Tarjeta</span>
+              <span>{{ __('lexi.cart.method_card') }}</span>
             </label>
             <label class="payment-method-option">
               <input type="radio" name="paymentMethod" value="paypal">
-              <span>PayPal</span>
+              <span>{{ __('lexi.cart.method_paypal') }}</span>
             </label>
           </div>
         </fieldset>
 
         <div id="cardFields" class="row g-2">
           <div class="col-12 col-sm-8">
-            <label class="form-label" for="paymentCardLast4">Últimos 4 dígitos</label>
+            <label class="form-label" for="paymentCardLast4">{{ __('lexi.cart.card_last4') }}</label>
             <input class="form-control" id="paymentCardLast4" type="text" inputmode="numeric" maxlength="4" placeholder="1234">
           </div>
           <div class="col-12 col-sm-4">
-            <label class="form-label" for="paymentCardExp">Caducidad</label>
+            <label class="form-label" for="paymentCardExp">{{ __('lexi.cart.card_expiry') }}</label>
             <input class="form-control" id="paymentCardExp" type="text" placeholder="MM/AA" maxlength="5">
           </div>
         </div>
@@ -106,8 +106,8 @@
         <p id="paymentFormError" class="payment-form-error d-none mt-3 mb-0" role="alert"></p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
-        <button class="btn btn-success" id="confirmCheckoutPayment" type="button">Confirmar y pagar</button>
+        <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">{{ __('lexi.common.cancel') }}</button>
+        <button class="btn btn-success" id="confirmCheckoutPayment" type="button" data-default-label="{{ __('lexi.cart.confirm_and_pay') }}">{{ __('lexi.cart.confirm_and_pay') }}</button>
       </div>
     </div>
   </div>
@@ -117,28 +117,28 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content payment-success-modal">
       <div class="modal-header">
-        <h2 class="h5 mb-0">Pago confirmado</h2>
-        <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        <h2 class="h5 mb-0">{{ __('lexi.cart.payment_success_title') }}</h2>
+        <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="{{ __('lexi.cart.close') }}"></button>
       </div>
       <div class="modal-body">
-        <p class="payment-success-modal__title mb-2">Tu pedido se ha procesado correctamente.</p>
+        <p class="payment-success-modal__title mb-2">{{ __('lexi.cart.payment_success_body') }}</p>
         <div class="payment-success-ticket">
           <div class="payment-success-ticket__row">
-            <span>Pedido</span>
+            <span>{{ __('lexi.cart.order') }}</span>
             <strong id="successOrderCode">-</strong>
           </div>
           <div class="payment-success-ticket__row">
-            <span>Método</span>
+            <span>{{ __('lexi.cart.method') }}</span>
             <strong id="successPaymentMethod">-</strong>
           </div>
           <div class="payment-success-ticket__row">
-            <span>Total</span>
+            <span>{{ __('lexi.cart.total') }}</span>
             <strong id="successOrderTotal">0 EUR</strong>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" type="button" data-bs-dismiss="modal">Continuar</button>
+        <button class="btn btn-primary" type="button" data-bs-dismiss="modal">{{ __('lexi.cart.continue') }}</button>
       </div>
     </div>
   </div>

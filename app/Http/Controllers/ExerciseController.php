@@ -638,8 +638,8 @@ class ExerciseController extends Controller
             return [
                 'type' => 'mcq',
                 'itemId' => null,
-                'passage' => sprintf('Focused reading practice (%s): choose the target word that best fits the sentence context.', $difficultyLevel),
-                'question' => 'Select the best option for the blank.',
+                'passage' => sprintf('Reading (%s): ____', $difficultyLevel),
+                'question' => '',
                 'options' => $options->all(),
                 'correct' => $options->search($correctWord),
             ];
@@ -755,18 +755,12 @@ class ExerciseController extends Controller
             $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
             $itemCefr = $this->normalizeCefrLevel((string) ($item['cefr'] ?? ''));
             $cefr = $itemCefr ?? $difficultyLevel;
-            $question = match ($cefr) {
-                'A1', 'A2' => 'Choose the best word for the gap.',
-                'B1', 'B2' => 'Choose the most natural option for the gap.',
-                default => 'Choose the most precise option for the gap.',
-            };
-            $gapSentence = $this->readingGapSentence($topic, $correct, $cefr);
 
             return [
                 'type' => 'mcq',
                 'itemId' => null,
-                'passage' => sprintf('%s (%s). %s', $topic, $cefr, $gapSentence),
-                'question' => $question,
+                'passage' => sprintf('%s (%s): ____', $topic, $cefr),
+                'question' => '',
                 'options' => $options->all(),
                 'correct' => $options->search($correct),
             ];
@@ -778,7 +772,7 @@ class ExerciseController extends Controller
         return collect($items)
             ->shuffle()
             ->take(4)
-            ->map(function ($item) use ($difficultyLevel) {
+            ->map(function ($item) {
                 $translation = (string) ($item['translation'] ?? '');
                 $answer = (string) ($item['text'] ?? '');
 
@@ -786,19 +780,11 @@ class ExerciseController extends Controller
                     return null;
                 }
 
-                $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
-                $prompt = match ($difficultyLevel) {
-                    'A1', 'A2' => 'Write one natural sentence in English for this situation.',
-                    'B1', 'B2' => 'Write one polished sentence in English. Keep the original meaning and tone.',
-                    default => 'Write one precise C-level sentence in English. Keep meaning, register, and lexical accuracy.',
-                };
-                $scenario = $this->writingScenario($topic, $difficultyLevel);
-
                 return [
                     'type' => 'translate',
                     'itemId' => null,
-                    'prompt' => $prompt,
-                    'sentence' => sprintf('%s Context source: "%s"', $scenario, $translation),
+                    'prompt' => '',
+                    'sentence' => $translation,
                     'answer' => $answer,
                 ];
             })
@@ -812,7 +798,7 @@ class ExerciseController extends Controller
         return collect($items)
             ->shuffle()
             ->take(3)
-            ->map(function ($item) use ($difficultyLevel) {
+            ->map(function ($item) {
                 $answer = (string) ($item['text'] ?? '');
                 $translation = (string) ($item['translation'] ?? '');
 
@@ -820,23 +806,12 @@ class ExerciseController extends Controller
                     return null;
                 }
 
-                $topic = $this->formatRuntimeTopic($item['topic'] ?? null);
-                $transcriptTemplate = match ($difficultyLevel) {
-                    'A1', 'A2' => 'Before we begin at the %s center, please %s and then sit near the front so we can start on time.',
-                    'B1', 'B2' => 'Before the review starts in the %s group, everyone should %s so the discussion stays focused and productive for all participants.',
-                    default => 'Before the panel review in the %s session, each candidate is expected to %s to ensure consistency, precision, and an appropriate professional register throughout the task.',
-                };
-                $question = match ($difficultyLevel) {
-                    'A1', 'A2' => 'Listen and type the missing expression.',
-                    default => 'Type the exact expression you hear.',
-                };
-
                 return [
                     'type' => 'fillin',
                     'itemId' => null,
-                    'transcript' => sprintf($transcriptTemplate, Str::lower($topic), $answer),
-                    'question' => $question,
-                    'sentence' => sprintf('In the %s recording, the speaker says we should ________ before the next step.', Str::lower($topic)),
+                    'transcript' => $answer,
+                    'question' => '',
+                    'sentence' => '______',
                     'answer' => $answer,
                 ];
             })
@@ -1018,7 +993,24 @@ class ExerciseController extends Controller
             ->sortByDesc('score')
             ->values();
 
-        $rows = $scored
+        $filteredScored = $scored
+            ->filter(function ($row) use ($targetTopic, $targetCefr) {
+                $bucket = $row['bucket'] ?? 'other';
+                $isSocialTopic = str_contains($targetTopic, 'social');
+
+                if (! $isSocialTopic && $bucket === 'social') {
+                    return false;
+                }
+
+                if (in_array($targetCefr, ['C1', 'C2'], true) && $bucket === 'social') {
+                    return false;
+                }
+
+                return true;
+            })
+            ->values();
+
+        $rows = $filteredScored
             ->filter(fn ($row) => ($row['bucket'] ?? 'other') === $correctBucket)
             ->pluck('word')
             ->unique()
@@ -1027,7 +1019,7 @@ class ExerciseController extends Controller
             ->all();
 
         if (count($rows) < $limit) {
-            $fallbackRows = $scored
+            $fallbackRows = $filteredScored
                 ->pluck('word')
                 ->unique()
                 ->values()

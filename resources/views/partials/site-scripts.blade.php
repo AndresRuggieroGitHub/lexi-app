@@ -1,7 +1,10 @@
 <script>
+	window.lexiUiLocale = @json(strtolower((string) app()->getLocale()));
 	window.lexiTranslations = {!! json_encode([
 		'languages' => __('lexi.languages'),
 		'categories' => __('lexi.categories'),
+		'exercises' => __('lexi.exercises'),
+		'common' => __('lexi.common'),
 		'js' => __('lexi.js'),
 	], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!};
 </script>

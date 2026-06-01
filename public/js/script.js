@@ -161,6 +161,44 @@
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+  
+  const resolveNativeUiLocale = () => {
+    const fromSession = String(getNativeLang() || "").trim().toLowerCase();
+    if (fromSession) return fromSession.split("-")[0];
+
+    const fromWindow = String(window.lexiUiLocale || "").trim().toLowerCase();
+    if (fromWindow) return fromWindow.split("-")[0];
+
+    return String(document.documentElement.lang || "en").toLowerCase().split("-")[0];
+  };
+
+  const getUiLocale = () => resolveNativeUiLocale();
+  const UI_BASE_FALLBACKS = {
+    en: { all_levels: "All levels", all_categories: "All categories" },
+    es: { all_levels: "Todos los niveles", all_categories: "Todas las categorias" },
+    fr: { all_levels: "Tous les niveaux", all_categories: "Toutes les categories" },
+    de: { all_levels: "Alle Niveaus", all_categories: "Alle Kategorien" },
+  };
+  const CATEGORY_FALLBACKS = {
+    es: {
+      travel: "Viajes", food: "Gastronomia", work: "Trabajo", business: "Negocios", education: "Educacion",
+      health: "Salud", science: "Ciencia", technology: "Tecnologia", culture: "Cultura", social: "Social",
+      home: "Hogar", nature: "Naturaleza", politics: "Politica", sport: "Deporte", art: "Arte",
+      media: "Medios", law: "Derecho", finance: "Finanzas"
+    },
+    fr: {
+      travel: "Voyages", food: "Gastronomie", work: "Travail", business: "Affaires", education: "Education",
+      health: "Sante", science: "Science", technology: "Technologie", culture: "Culture", social: "Social",
+      home: "Maison", nature: "Nature", politics: "Politique", sport: "Sport", art: "Art",
+      media: "Medias", law: "Droit", finance: "Finance"
+    },
+    de: {
+      travel: "Reisen", food: "Essen", work: "Arbeit", business: "Wirtschaft", education: "Bildung",
+      health: "Gesundheit", science: "Wissenschaft", technology: "Technologie", culture: "Kultur", social: "Soziales",
+      home: "Zuhause", nature: "Natur", politics: "Politik", sport: "Sport", art: "Kunst",
+      media: "Medien", law: "Recht", finance: "Finanzen"
+    }
+  };
 
   const getTopicLabel = (topicRaw) => {
     const key = String(topicRaw || "")
@@ -171,13 +209,92 @@
     if (!key) return "";
 
     const translated = t(`categories.${key}`);
-    if (translated && translated !== `categories.${key}`) {
+    if (translated && translated !== `categories.${key}` && !isEnglishCategoryLeak(key, translated)) {
       return translated;
+    }
+    
+    const localeFallback = CATEGORY_FALLBACK_SAFE(getUiLocale(), key);
+    if (localeFallback) {
+      return localeFallback;
     }
 
     // Fallback legible si falta traduccion
     const clean = key.replace(/[._-]+/g, " ").trim();
     return clean.charAt(0).toUpperCase() + clean.slice(1);
+  };
+  
+  const CATEGORY_FALLBACK_SAFE = (locale, key) => {
+    const table = CATEGORY_FALLBACKS[locale];
+    if (!table) return "";
+    const value = table[key];
+    return typeof value === "string" ? value : "";
+  };
+
+  const isEnglishCategoryLeak = (key, value) => {
+    if (getUiLocale() === "en") return false;
+
+    const english = CATEGORY_FALLBACK_SAFE("en", key);
+    if (!english) return false;
+
+    const normalize = (text) => String(text || "").trim().toLowerCase();
+    return normalize(value) === normalize(english);
+  };
+
+  const uiBaseFallback = (key, fallback) => {
+    const locale = getUiLocale();
+    const table = UI_BASE_FALLBACKS[locale] || UI_BASE_FALLBACKS.en;
+    const value = table && typeof table[key] === "string" ? table[key] : "";
+    return value.trim() || fallback;
+  };
+
+  const getNativeCategoryLabelByValue = (topicValue) => {
+    const key = String(topicValue || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^categories\./i, "")
+      .replace(/^topics\./i, "");
+
+    if (!key) return "";
+
+    const native = CATEGORY_FALLBACK_SAFE(getUiLocale(), key);
+    if (native) return native;
+
+    const translated = getTopicLabel(key);
+    if (translated) return translated;
+
+    return key.replace(/[._-]+/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+  };
+
+  const extractLeadingEmoji = (label) => {
+    const text = String(label || "").trim();
+    const match = text.match(/^([^\p{L}\p{N}\s]+)/u);
+    return match ? match[1] : "";
+  };
+  
+  const relocalizeTopicFilterOptions = () => {
+    const topicFilter = document.getElementById("topicFilter");
+    if (!topicFilter) return;
+
+    if (topicFilter.options.length > 0) {
+      topicFilter.options[0].textContent = uiBaseFallback("all_categories", "All categories");
+    }
+
+    Array.from(topicFilter.options).forEach((option) => {
+      const value = String(option.value || "").trim().toLowerCase();
+      if (!value || value === "all") return;
+
+      const currentEmoji = option.dataset.topicEmoji || extractLeadingEmoji(option.textContent);
+      option.dataset.topicEmoji = currentEmoji;
+
+      const localizedLabel = getNativeCategoryLabelByValue(value);
+      option.textContent = currentEmoji ? `${currentEmoji} ${localizedLabel}`.trim() : localizedLabel;
+    });
+  };
+
+  const relocalizeCefrFilterOptions = () => {
+    const cefrFilter = document.getElementById("cefrFilter");
+    if (!cefrFilter || cefrFilter.options.length === 0) return;
+    cefrFilter.options[0].textContent = uiBaseFallback("all_levels", "All levels");
   };
 
   const renderLibraryCatalog = (catalog = []) => {
@@ -225,6 +342,11 @@
   const applyServerSessionState = (payload) => {
     serverSessionState = payload || null;
 
+    const motherTongueCode = String(payload?.user?.mother_tongue_code || "").trim().toLowerCase();
+    if (motherTongueCode) {
+      window.lexiUiLocale = motherTongueCode;
+    }
+
     const activeCode = payload?.active_language?.code;
     if (activeCode && LANG_CONFIG[activeCode]) {
       setActiveLang(activeCode);
@@ -233,6 +355,9 @@
 
     setStoredAdminState(Boolean(payload?.user?.is_admin));
     syncActiveLangFlag();
+
+    relocalizeTopicFilterOptions();
+    relocalizeCefrFilterOptions();
 
     return serverSessionState;
   };
@@ -1030,7 +1155,7 @@
       if (checkoutButton) {
         checkoutButton.classList.remove("is-processing");
         checkoutButton.disabled = true;
-        checkoutButton.textContent = checkoutButton.dataset.checkoutLabel || "Pagar ahora";
+        checkoutButton.textContent = checkoutButton.dataset.checkoutLabel || t("js.cart.pay_now");
       }
       return;
     }
@@ -1065,7 +1190,7 @@
     if (clearButton) clearButton.disabled = false;
     if (checkoutButton) {
       checkoutButton.disabled = false;
-      checkoutButton.textContent = `Pagar ${formatEur(totalValue)}`;
+      checkoutButton.textContent = t("js.cart.pay_amount", { amount: formatEur(totalValue) });
     }
   };
 
@@ -1124,7 +1249,7 @@
     const openPaymentModal = () => {
       const cart = getCart();
       if (!cart.length) {
-        showAlert("No hay productos en el carrito.", "warning");
+        showAlert(t("js.cart.checkout_no_products"), "warning");
         return;
       }
 
@@ -1176,13 +1301,13 @@
     const submitCheckout = () => {
       const cart = getCart();
       if (!cart.length) {
-        setPaymentFormError("Tu carrito está vacío.");
+        setPaymentFormError(t("js.cart.form_empty_cart"));
         return;
       }
 
       const fullName = (paymentFullName?.value || "").trim();
       if (fullName.length < 3) {
-        setPaymentFormError("Escribe el nombre del titular.");
+        setPaymentFormError(t("js.cart.form_holder_name"));
         paymentFullName?.focus();
         return;
       }
@@ -1191,26 +1316,26 @@
       if (method === "card") {
         const last4 = (paymentCardLast4?.value || "").replace(/\D/g, "");
         if (last4.length !== 4) {
-          setPaymentFormError("Introduce 4 dígitos de tarjeta válidos.");
+          setPaymentFormError(t("js.cart.form_card_digits"));
           paymentCardLast4?.focus();
           return;
         }
 
         const expiryDigits = (paymentCardExp?.value || "").replace(/\D/g, "");
         if (expiryDigits.length !== 4) {
-          setPaymentFormError("Introduce una caducidad válida en formato MM/AA.");
+          setPaymentFormError(t("js.cart.form_expiry"));
           paymentCardExp?.focus();
           return;
         }
       }
 
       setPaymentFormError("");
-      setCheckoutStatus("Procesando pago...");
+      setCheckoutStatus(t("js.cart.payment_processing"));
 
       if (confirmCheckoutPayment) {
         confirmCheckoutPayment.disabled = true;
         confirmCheckoutPayment.classList.add("is-processing");
-        confirmCheckoutPayment.textContent = "Procesando";
+        confirmCheckoutPayment.textContent = t("js.cart.processing");
       }
 
       libraryApiFetch("/api/cart/checkout", {
@@ -1230,7 +1355,7 @@
             const firstError = payload?.errors
               ? Object.values(payload.errors).flat().find(Boolean)
               : null;
-            throw new Error(firstError || payload?.message || "No se pudo completar la compra.");
+            throw new Error(firstError || payload?.message || t("js.cart.checkout_unavailable"));
           }
 
           return response.json();
@@ -1238,7 +1363,7 @@
         .then((payload) => {
           const count = Number(payload?.summary?.payments_count || 0);
           const orderTotal = cartTotalPrice(cart);
-          const methodLabel = method === "paypal" ? "PayPal" : "Tarjeta";
+          const methodLabel = method === "paypal" ? t("js.cart.method_paypal") : t("js.cart.method_card");
           clearCart();
           if (paymentModal) paymentModal.hide();
           if (paymentFullName) paymentFullName.value = "";
@@ -1249,10 +1374,14 @@
           if (successPaymentMethod) successPaymentMethod.textContent = methodLabel;
           if (successOrderTotal) successOrderTotal.textContent = formatEur(orderTotal);
           if (successModal) successModal.show();
-          showAlert(`Compra registrada. ${count} pago${count === 1 ? "" : "s"} guardado${count === 1 ? "" : "s"}.`, "success");
+          showAlert(t("js.cart.checkout_success", {
+            count,
+            plural: count === 1 ? "" : "s",
+            saved_plural: count === 1 ? "" : "s",
+          }), "success");
         })
         .catch((error) => {
-          const message = error?.message || "No se pudo completar la compra.";
+          const message = error?.message || t("js.cart.checkout_unavailable");
           setPaymentFormError(message);
           setCheckoutStatus(message, true);
         })
@@ -1260,7 +1389,7 @@
           if (confirmCheckoutPayment) {
             confirmCheckoutPayment.disabled = false;
             confirmCheckoutPayment.classList.remove("is-processing");
-            confirmCheckoutPayment.textContent = "Confirmar y pagar";
+            confirmCheckoutPayment.textContent = confirmCheckoutPayment.dataset.defaultLabel || t("js.cart.confirm_and_pay");
           }
           renderCartPage();
         });
@@ -1305,7 +1434,7 @@
       clearButton.addEventListener("click", () => {
         clearCart();
         setCheckoutStatus("");
-        showAlert("Carrito vaciado", "warning");
+        showAlert(t("js.cart.cart_cleared"), "warning");
       });
     }
 
@@ -2045,7 +2174,7 @@
       if (!fileNameDisplay) return;
 
       const name = file?.name ? String(file.name) : "";
-      fileNameDisplay.textContent = name ? `Archivo seleccionado: ${name}` : "";
+      fileNameDisplay.textContent = name ? t("js.library.selected_file", { name }) : "";
       fileNameDisplay.title = name;
 
       if (dropZone) {
@@ -2072,9 +2201,14 @@
       const language           = getActiveLang();
       const languageCollections = getCollections().filter((c) => c.lang === language);
       const selectedIds        = new Set();
+      const initialConfirmLabel = confirmBtn.textContent;
+      let isSubmitting = false;
       newInput.value           = "";
       newWrap.hidden           = true;
-      summary.textContent      = `Se detectaron ${words.length} palabra${words.length !== 1 ? "s" : ""} únicas para buscar en el catálogo.`;
+      summary.textContent      = t("js.library.import_detected", {
+        count: words.length,
+        plural: words.length === 1 ? "" : "s",
+      });
 
       const renderColls = () => {
         const hasColls = languageCollections.length > 0;
@@ -2110,7 +2244,9 @@
 
       const close = () => {
         modal.hidden = true;
+        isSubmitting = false;
         confirmBtn.disabled = false;
+        confirmBtn.textContent = initialConfirmLabel;
         confirmBtn.removeEventListener("click", onConfirm);
         cancelBtn.removeEventListener("click", close);
         newBtn.removeEventListener("click", onNewBtn);
@@ -2122,14 +2258,18 @@
       const onBackdrop = (e) => { if (e.target === modal) close(); };
 
       const onNewBtn = () => {
+        if (isSubmitting) return;
         newWrap.hidden = !newWrap.hidden;
         if (!newWrap.hidden) newInput.focus();
       };
 
       const onConfirm = () => {
+        if (isSubmitting) return;
         const newName = newInput.value.trim();
 
+        isSubmitting = true;
         confirmBtn.disabled = true;
+        confirmBtn.textContent = t("js.library.importing");
 
         const payload = {
           language,
@@ -2162,14 +2302,14 @@
               }
 
               if (!message && (r.status === 401 || r.status === 403 || r.status === 419)) {
-                message = "Tu sesión ha caducado. Vuelve a iniciar sesión.";
+                message = t("js.library.session_expired");
               }
 
-              throw new Error(message || "Error al importar. Inténtalo de nuevo.");
+              throw new Error(message || t("js.library.import_error_retry"));
             }
 
             if (!contentType.includes("application/json")) {
-              throw new Error("La sesión no está activa. Inicia sesión y vuelve a intentarlo.");
+              throw new Error(t("js.library.session_inactive"));
             }
 
             return r.json();
@@ -2178,9 +2318,21 @@
             const s = data.import_summary || {};
             const matched = s.matched_count ?? 0;
             const skipped = s.skipped_count ?? 0;
+            const skippedText = skipped > 0
+              ? t("js.library.import_skipped", {
+                skipped,
+                skipped_plural: skipped === 1 ? "" : "s",
+              })
+              : "";
             const msg = matched > 0
-              ? `${matched} palabra${matched !== 1 ? "s" : ""} importada${matched !== 1 ? "s" : ""}${skipped > 0 ? `. ${skipped} no encontrada${skipped !== 1 ? "s" : ""} en el catálogo.` : "."}`
-              : "Ninguna palabra encontrada en el catálogo.";
+              ? t("js.library.import_result", {
+                matched,
+                matched_plural: matched === 1 ? "" : "s",
+                imported_plural: matched === 1 ? "" : "s",
+                separator: skippedText ? " " : "",
+                skipped_text: skippedText,
+              })
+              : t("js.library.import_none_found");
             showAlert(msg, matched > 0 ? "success" : "warning");
             syncServerLibraryState(data || {});
             window.dispatchEvent(new Event("lexi-library-updated"));
@@ -2188,8 +2340,10 @@
             close();
           })
           .catch((err) => {
+            isSubmitting = false;
             confirmBtn.disabled = false;
-            showAlert(err?.message || "Error al importar. Inténtalo de nuevo.", "danger");
+            confirmBtn.textContent = initialConfirmLabel;
+            showAlert(err?.message || t("js.library.import_error_retry"), "danger");
           });
       };
 
@@ -2235,7 +2389,7 @@
         reader.onload = () => {
           const words = parseWords(reader.result);
           if (!words.length) {
-            showAlert("El archivo no contiene palabras.", "warning");
+            showAlert(t("js.library.file_no_words"), "warning");
             return;
           }
           openImportDestinationModal(words, () => {
@@ -2251,7 +2405,7 @@
       importPasteBtn.addEventListener("click", () => {
         const words = parseWords(pasteInput.value);
         if (!words.length) {
-          showAlert("Escribe o pega al menos una palabra.", "warning");
+          showAlert(t("js.library.paste_min_one"), "warning");
           return;
         }
         openImportDestinationModal(words, () => { pasteInput.value = ""; });
@@ -2266,7 +2420,15 @@
     const noResults = document.getElementById("noResults");
     const paginationEl = document.getElementById("libraryPagination");
 
-    if (!searchInput) return;
+    if (!searchInput) return; 
+    relocalizeTopicFilterOptions();
+    relocalizeCefrFilterOptions();
+
+    // Re-apply once async session state has settled to prevent stale English labels.
+    Promise.resolve(window.lexiSessionReady).then(() => {
+      relocalizeTopicFilterOptions();
+      relocalizeCefrFilterOptions();
+    }).catch(() => {});
 
     const CARDS_PER_PAGE = 16;
     let currentPage = 1;
@@ -2713,8 +2875,15 @@
         document.getElementById("levelBadge").textContent = level.label || "A1";
         document.getElementById("levelBadge").className = `profile-level-badge cefr-${level.key || "a1"}`;
         document.getElementById("levelBar").style.width = `${level.progress_percent || 0}%`;
+        const nextLevelConnector = (() => {
+          const localized = t("js.progress.to_level", { level: level.next_label || "" });
+          if (localized && localized !== "js.progress.to_level") {
+            return localized;
+          }
+          return level.next_label ? `to ${level.next_label}` : "";
+        })();
         document.getElementById("levelNext").textContent = level.next_target
-          ? `${formatCount(level.current_words || 0)} / ${formatCount(level.next_target)} ${t("js.progress.saved_word_other")} ${level.next_label || "" ? `para ${level.next_label || ""}` : ""}`
+          ? `${formatCount(level.current_words || 0)} / ${formatCount(level.next_target)} ${t("js.progress.saved_word_other")} ${nextLevelConnector}`
           : t("js.progress.max_level_reached");
 
         document.getElementById("modeReading").textContent = formatCount(state?.exercises?.modes?.reading || 0);
@@ -2733,6 +2902,10 @@
               li.className = "profile-word-item";
               const translation = item.translation ? `<span class="profile-word-translation">${item.translation}</span>` : "";
               const meta = [item.language ? item.language.toUpperCase() : "", item.cefr || "", item.topic || ""]
+                .map((part, index) => {
+                  if (index !== 2) return part;
+                  return getTopicLabel(part);
+                })
                 .filter(Boolean)
                 .join(" · ");
 
