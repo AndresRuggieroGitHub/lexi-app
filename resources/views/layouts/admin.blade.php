@@ -25,6 +25,7 @@
       <div class="admin-brand" aria-label="{{ __('lexi.admin.layout.brand_aria') }}">
         <span class="admin-brand__name">Lexi Admin</span>
         <span class="admin-brand__sub">{{ __('lexi.admin.layout.brand_sub') }}</span>
+        <span class="admin-brand__sub">{{ __('lexi.admin.layout.workspace') }}</span>
       </div>
       <div class="admin-sidebar-footer">
         <a href="{{ route('app') }}"><i class="bi bi-house-door"></i> {{ __('lexi.admin.layout.open_app') }}</a>

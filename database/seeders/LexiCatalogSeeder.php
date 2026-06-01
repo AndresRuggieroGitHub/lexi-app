@@ -202,14 +202,37 @@ class LexiCatalogSeeder extends Seeder
         foreach (array_keys($conceptWordIds) as $conceptIndex) {
             $suffix = $conceptIndex + 1;
 
-            DB::statement(
-                'INSERT IGNORE INTO translations (source_word_id, target_word_id, context_note, created_at) '
-                . 'SELECT s.id, t.id, NULL, NOW() '
-                . 'FROM words s '
-                . 'JOIN words t ON s.id <> t.id '
-                . 'WHERE s.client_key LIKE ? AND t.client_key LIKE ?',
-                ['seedv4-%-' . $suffix, 'seedv4-%-' . $suffix]
-            );
+            $sourceWords = DB::table('words')
+                ->select('id')
+                ->where('client_key', 'like', 'seedv4-%-' . $suffix)
+                ->pluck('id')
+                ->all();
+
+            if ($sourceWords === []) {
+                continue;
+            }
+
+            $now = now();
+            $rows = [];
+
+            foreach ($sourceWords as $sourceId) {
+                foreach ($sourceWords as $targetId) {
+                    if ((int) $sourceId === (int) $targetId) {
+                        continue;
+                    }
+
+                    $rows[] = [
+                        'source_word_id' => (int) $sourceId,
+                        'target_word_id' => (int) $targetId,
+                        'context_note' => null,
+                        'created_at' => $now,
+                    ];
+                }
+            }
+
+            if ($rows !== []) {
+                DB::table('translations')->insertOrIgnore($rows);
+            }
         }
     }
 

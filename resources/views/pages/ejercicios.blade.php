@@ -114,19 +114,39 @@
   const SHARED_TOPIC_OPTIONS = Array.isArray(sharedConfig.topic_options) ? sharedConfig.topic_options : [];
   const SKILL_LABELS = {
     en: ['Reading', 'Listening', 'Speaking', 'Writing', 'Challenge'],
-    fr: ['Lecture', 'Écoute', 'Expression', 'Écriture', 'Challenge'],
-    de: ['Lesen', 'Hören', 'Sprechen', 'Schreiben', 'Challenge'],
-    it: ['Lettura', 'Ascolto', 'Parlare', 'Scrittura', 'Challenge'],
-    no: ['Lesing', 'Lytting', 'Snakking', 'Skriving', 'Challenge'],
-    dk: ['Læsning', 'Lytning', 'Tale', 'Skrivning', 'Challenge'],
-    fi: ['Lukeminen', 'Kuuntelu', 'Puhuminen', 'Kirjoitus', 'Challenge'],
-    ko: ['읽기', '듣기', '말하기', '쓰기', '챌린지'],
-    zh: ['阅读', '听力', '口语', '写作', '挑战'],
-    ru: ['Чтение', 'Слушание', 'Говорение', 'Письмо', 'Челлендж'],
-    ua: ['Читання', 'Слухання', 'Говоріння', 'Письмо', 'Виклик'],
-    gr: ['Ανάγνωση', 'Ακρόαση', 'Ομιλία', 'Γραφή', 'Challenge'],
     es: ['Lectura', 'Escucha', 'Habla', 'Escritura', 'Desafio'],
+    fr: ['Lecture', 'Écoute', 'Expression', 'Écriture', 'Défi'],
+    de: ['Lesen', 'Hören', 'Sprechen', 'Schreiben', 'Challenge'],
+    it: ['Lettura', 'Ascolto', 'Parlato', 'Scrittura', 'Sfida'],
+    pt: ['Leitura', 'Escuta', 'Fala', 'Escrita', 'Desafio'],
+    ro: ['Citire', 'Ascultare', 'Vorbire', 'Scriere', 'Provocare'],
+    bg: ['Четене', 'Слушане', 'Говорене', 'Писане', 'Предизвикателство'],
+    ru: ['Чтение', 'Аудирование', 'Говорение', 'Письмо', 'Челлендж'],
+    uk: ['Читання', 'Слухання', 'Говоріння', 'Письмо', 'Виклик'],
+    zh: ['阅读', '听力', '口语', '写作', '挑战'],
+    ja: ['読解', 'リスニング', 'スピーキング', 'ライティング', 'チャレンジ'],
+    ko: ['읽기', '듣기', '말하기', '쓰기', '챌린지'],
+    hi: ['पठन', 'श्रवण', 'बोलना', 'लेखन', 'चुनौती'],
+    ar: ['قراءة', 'استماع', 'تحدث', 'كتابة', 'تحدي'],
+    he: ['קריאה', 'האזנה', 'דיבור', 'כתיבה', 'אתגר'],
+    tr: ['Okuma', 'Dinleme', 'Konuşma', 'Yazma', 'Meydan Okuma'],
+    id: ['Membaca', 'Mendengarkan', 'Berbicara', 'Menulis', 'Tantangan'],
+    vi: ['Đọc', 'Nghe', 'Nói', 'Viết', 'Thử thách'],
+    th: ['การอ่าน', 'การฟัง', 'การพูด', 'การเขียน', 'ความท้าทาย'],
+    el: ['Ανάγνωση', 'Ακρόαση', 'Ομιλία', 'Γραφή', 'Πρόκληση'],
+    cs: ['Čtení', 'Poslech', 'Mluvení', 'Psaní', 'Výzva'],
+    sk: ['Čítanie', 'Počúvanie', 'Hovorenie', 'Písanie', 'Výzva'],
+    hu: ['Olvasás', 'Hallás utáni értés', 'Beszéd', 'Írás', 'Kihívás'],
+    sv: ['Läsning', 'Hörförståelse', 'Tal', 'Skrivning', 'Utmaning'],
+    da: ['Læsning', 'Lytning', 'Tale', 'Skrivning', 'Udfordring'],
+    no: ['Lesing', 'Lytting', 'Snakking', 'Skriving', 'Utfordring'],
+    fi: ['Lukeminen', 'Kuuntelu', 'Puhuminen', 'Kirjoittaminen', 'Haaste'],
   };
+  SKILL_LABELS.gr = SKILL_LABELS.el;
+  SKILL_LABELS.dk = SKILL_LABELS.da;
+  SKILL_LABELS.ua = SKILL_LABELS.uk;
+  SKILL_LABELS.nb = SKILL_LABELS.no;
+  SKILL_LABELS.nn = SKILL_LABELS.no;
   const BADGE_MODES = ['reading', 'listening', 'speaking', 'writing', 'mix'];
   const EXERCISE_SOURCE_KEY = 'lexiExerciseSource';
   const EXERCISE_COLLECTION_KEY = 'lexiExerciseCollection';
@@ -161,6 +181,28 @@
     if (topicSelect) topicSelect.disabled = false;
   }
   const CATALOG_TOPIC_ORDER = SHARED_TOPIC_OPTIONS.map(topic => topic.value);
+    function resolveModeLabelsForLanguage(langCode) {
+      const raw = String(langCode || '').trim().toLowerCase();
+      const normalized = raw.split('-')[0];
+
+      return SKILL_LABELS[raw] || SKILL_LABELS[normalized] || SKILL_LABELS.en;
+    }
+
+    function getLocalizedModeTitle(mode) {
+      if (mode === 'mix') {
+        const labels = resolveModeLabelsForLanguage(getActiveLang());
+        return tx('challenge_label', labels[4] || 'Challenge');
+      }
+
+      const modeIndex = BADGE_MODES.indexOf(mode);
+      if (modeIndex === -1) {
+        return mode;
+      }
+
+      const labels = resolveModeLabelsForLanguage(getActiveLang());
+      return labels[modeIndex] || mode;
+    }
+
   const TOPIC_OPTION_LABELS = SHARED_TOPIC_OPTIONS.reduce((labels, topic) => {
     labels[topic.value] = topic.label;
     return labels;
@@ -409,12 +451,16 @@
       button.addEventListener('click', async () => {
         if (exerciseSourceSwitchInFlight) return;
         exerciseSourceSwitchInFlight = true;
-        localStorage.setItem(EXERCISE_SOURCE_KEY, button.dataset.sourceTab);
-        localStorage.setItem(EXERCISE_CATALOG_LEVEL_KEY, '');
-        localStorage.setItem(EXERCISE_CATALOG_TOPIC_KEY, '');
-        localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
+        const nextSource = button.dataset.sourceTab;
+        const currentSource = getSelectedSourceType();
+        localStorage.setItem(EXERCISE_SOURCE_KEY, nextSource);
+        if (nextSource === 'saved' && !localStorage.getItem(EXERCISE_COLLECTION_KEY)) {
+          localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
+        }
         try {
-          await loadVocabularySources(button.dataset.sourceTab === 'saved' ? t('loading_saved_lists') : t('loading_catalog'), true);
+          if (nextSource !== currentSource) {
+            await loadVocabularySources(nextSource === 'saved' ? t('loading_saved_lists') : t('loading_catalog'), true);
+          }
           syncSourcePanels();
           setupExerciseCatalogSelects();
           setupExerciseCollectionSelect();
@@ -483,6 +529,17 @@
     localStorage.setItem(EXERCISE_CATALOG_LEVEL_KEY, '');
     localStorage.setItem(EXERCISE_CATALOG_TOPIC_KEY, '');
     localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
+  }
+
+  async function initializeExercisePageEntryState(forceReloadSources = true) {
+    resetExerciseSelectionState();
+    syncSourcePanels();
+    setupExerciseCatalogSelects();
+    setupExerciseCollectionSelect();
+    await loadVocabularySources(t('loading_options'), true, forceReloadSources);
+    setupExerciseCatalogSelects();
+    setupExerciseCollectionSelect();
+    syncSourcePanels();
   }
 
   function resolveDifficultyLevel(source, items) {
@@ -929,13 +986,16 @@
     if (!items.length) return null;
 
     return {
-      title: selectedTemplate.title || EXERCISES[mode].title,
+      title: selectedTemplate.title || getLocalizedModeTitle(mode),
       items,
     };
   }
 
   function getModeData(mode) {
     const base = EXERCISES[mode];
+    if (base) {
+      base.title = getLocalizedModeTitle(mode);
+    }
     const source = getSelectedVocabularySource();
     const templateModeData = getTemplateModeData(mode);
     const difficultyLevel = resolveDifficultyLevel(source, source.items || []);
@@ -1026,44 +1086,46 @@
     }
   }
 
-  (function updateBadges() {
+  function updateExerciseModeLabels() {
     const lang = getActiveLang();
-    const labels = SKILL_LABELS[lang] || SKILL_LABELS['en'];
+    const labels = resolveModeLabelsForLanguage(lang);
     document.querySelectorAll('.exercise-card[data-mode]').forEach(card => {
       const idx = BADGE_MODES.indexOf(card.dataset.mode);
       if (idx === -1) return;
       const badge = card.querySelector('.exercise-card-badge');
+      const label = card.querySelector('.exercise-card-label');
       if (badge) badge.textContent = labels[idx];
+      if (label) label.textContent = labels[idx];
     });
-  })();
+  }
+
+  updateExerciseModeLabels();
 
   async function bootstrapExercises() {
     initSpeechVoices();
     primeUiAudio();
-    const preloadLanguage = getActiveLang();
+    const setGlobalLoading = typeof window.lexiSetPageLoading === 'function' ? window.lexiSetPageLoading : null;
+    const loadingLabel = tx('loading_options', 'Cargando opciones...');
 
-    // Render source controls immediately with local fallback data.
-    setupExerciseSourceTabs();
-    setupExerciseCatalogSelects();
-    setupExerciseCollectionSelect();
-    syncSourcePanels();
-
-    const preloadSourcesPromise = loadVocabularySources();
-    const sessionReadyPromise = window.lexiSessionReady && typeof window.lexiSessionReady.then === 'function'
-      ? window.lexiSessionReady
-      : Promise.resolve();
-
-    try {
-      await Promise.allSettled([preloadSourcesPromise, sessionReadyPromise]);
-    } catch {}
-
-    if (preloadLanguage !== getActiveLang()) {
-      await loadVocabularySources(t('loading_options'), false, true);
+    if (setGlobalLoading) {
+      setGlobalLoading(true, loadingLabel);
     }
 
-    setupExerciseCatalogSelects();
-    setupExerciseCollectionSelect();
-    syncSourcePanels();
+    try {
+      // Render source controls immediately, then enforce page-entry defaults.
+      setupExerciseSourceTabs();
+      await initializeExercisePageEntryState(true);
+
+      const sessionReadyPromise = window.lexiSessionReady && typeof window.lexiSessionReady.then === 'function'
+        ? window.lexiSessionReady
+        : Promise.resolve();
+
+      await Promise.allSettled([sessionReadyPromise]);
+    } finally {
+      if (setGlobalLoading) {
+        setGlobalLoading(false);
+      }
+    }
   }
 
   bootstrapExercises();
@@ -1078,10 +1140,29 @@
   window.addEventListener('keydown', primeAudioOnInteraction);
 
   window.addEventListener('lexi-lang-changed', async () => {
+    updateExerciseModeLabels();
     await loadVocabularySources(t('loading_options'), false, true);
     setupExerciseCatalogSelects();
     setupExerciseCollectionSelect();
     syncSourcePanels();
+  });
+
+  window.addEventListener('pageshow', async (event) => {
+    if (!event.persisted) return;
+    const setGlobalLoading = typeof window.lexiSetPageLoading === 'function' ? window.lexiSetPageLoading : null;
+    const loadingLabel = tx('loading_options', 'Cargando opciones...');
+
+    if (setGlobalLoading) {
+      setGlobalLoading(true, loadingLabel);
+    }
+
+    try {
+      await initializeExercisePageEntryState(true);
+    } finally {
+      if (setGlobalLoading) {
+        setGlobalLoading(false);
+      }
+    }
   });
 
   const EXERCISES = {
@@ -1580,13 +1661,26 @@
     }
   }
 
+  function normalizeLangCodeForSpeech(langCode) {
+    const raw = String(langCode || '').trim().toLowerCase();
+    const base = raw.split('-')[0];
+    const aliases = {
+      gr: 'el',
+      dk: 'da',
+      ua: 'uk',
+      no: 'nb',
+    };
+
+    return aliases[base] || base || 'en';
+  }
+
   function resolveSpeechVoice(langCode) {
     if (!('speechSynthesis' in window)) return null;
 
     const voices = window.speechSynthesis.getVoices() || [];
     if (!voices.length) return null;
 
-    const normalizedLang = String(langCode || 'en').toLowerCase();
+    const normalizedLang = normalizeLangCodeForSpeech(langCode);
     const wantedPrefix = normalizedLang === 'en' ? 'en' : normalizedLang;
 
     const scoreVoice = (voice) => {
@@ -1612,7 +1706,7 @@
     const voices = window.speechSynthesis.getVoices() || [];
     if (!voices.length) return [];
 
-    const normalizedLang = String(langCode || 'en').toLowerCase();
+    const normalizedLang = normalizeLangCodeForSpeech(langCode);
     const wantedPrefix = normalizedLang === 'en' ? 'en' : normalizedLang;
     const matching = voices.filter(voice => String(voice.lang || '').toLowerCase().startsWith(wantedPrefix));
 
@@ -1725,6 +1819,30 @@
     return sentenceText;
   }
 
+  function resolveListeningSentenceForGap(baseText, questionText) {
+    const normalizedBase = normalizeTextCandidate(baseText);
+    const normalizedQuestion = normalizeTextCandidate(questionText);
+    const gapRegex = /_{2,}/;
+
+    if (gapRegex.test(normalizedBase)) {
+      return normalizedBase;
+    }
+
+    if (gapRegex.test(normalizedQuestion)) {
+      const colonIndex = normalizedQuestion.indexOf(':');
+      if (colonIndex > 0) {
+        const afterColon = normalizedQuestion.slice(colonIndex + 1).trim();
+        if (gapRegex.test(afterColon)) {
+          return afterColon;
+        }
+      }
+
+      return normalizedQuestion;
+    }
+
+    return normalizedBase;
+  }
+
   function normalizeTextCandidate(value) {
     if (typeof value === 'string') {
       return value.trim();
@@ -1765,13 +1883,15 @@
       return inputHtml;
     }
 
-    if (normalizedBase.includes('________')) {
-      return normalizedBase.replace('________', inputHtml);
+    // Support generic placeholders like ___, _____, ________ across languages.
+    const gapPlaceholderRegex = /_{2,}/;
+    if (gapPlaceholderRegex.test(normalizedBase)) {
+      return normalizedBase.replace(gapPlaceholderRegex, inputHtml);
     }
 
     if (normalizedAnswer !== '') {
       const escapedAnswer = normalizedAnswer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const answerRegex = new RegExp(escapedAnswer, 'gi');
+      const answerRegex = new RegExp(escapedAnswer, 'i');
       if (answerRegex.test(normalizedBase)) {
         return normalizedBase.replace(answerRegex, inputHtml);
       }
@@ -1816,6 +1936,7 @@
     const normalizedQuestion = normalizeTextCandidate(questionText);
     const normalizedAnswer = normalizeTextCandidate(answerText);
     const normalizedBase = normalizeTextCandidate(baseText);
+    const gapRegex = /_{2,}/;
 
     const simplifyComparableText = (value, answerValue = '') => {
       let text = String(value || '').trim();
@@ -1845,6 +1966,12 @@
     };
 
     if (normalizedQuestion === '') {
+      return tx('listening_question_default', 'Listen and type the missing expression.');
+    }
+
+    // If the question already includes a blank placeholder, show a short prompt
+    // and let the sentence-with-gap below carry the actual text.
+    if (gapRegex.test(normalizedQuestion)) {
       return tx('listening_question_default', 'Listen and type the missing expression.');
     }
 
@@ -1980,10 +2107,11 @@
     const listeningBaseText = resolveListeningBaseText(item);
     const listeningAnswerText = String(item.answer || '').trim();
     const listeningQuestion = sanitizeListeningQuestion(item.question, listeningAnswerText, listeningBaseText);
+    const listeningSentenceText = resolveListeningSentenceForGap(listeningBaseText, item.question);
     const expectedAnswerLength = Math.max(4, String(item.answer || '').trim().length || 4);
-    const inputWidthCh = Math.max(8, Math.min(26, expectedAnswerLength + 2));
+    const inputWidthCh = Math.max(6, Math.min(34, expectedAnswerLength + 2));
     const inputHtml = '<input class="ex-input" type="text" autocomplete="off" spellcheck="false" style="width:' + inputWidthCh + 'ch">';
-    const sentenceWithInput = buildListeningSentenceWithGap(listeningBaseText, listeningAnswerText, inputHtml);
+    const sentenceWithInput = buildListeningSentenceWithGap(listeningSentenceText, listeningAnswerText, inputHtml);
 
     container.innerHTML =
       '<p class="ex-type-label"><i class="bi bi-headphones"></i> ' + t('listening_label') + '</p>' +

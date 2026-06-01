@@ -125,6 +125,8 @@
     document.body.classList.toggle("page-is-loading", isLoading);
   };
 
+  window.lexiSetPageLoading = setPageLoading;
+
   const getXsrfToken = () => {
     const cookie = document.cookie
       .split("; ")

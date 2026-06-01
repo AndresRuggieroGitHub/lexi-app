@@ -47,7 +47,7 @@ class ExerciseController extends Controller
         );
 
         $items = $this->buildRuntimeItems($validated['mode'], $sourceItems, $validated['level'] ?? null);
-        $title = $this->runtimeTitleForMode($validated['mode'], $validated['source_type']);
+        $title = $this->runtimeTitleForMode($validated['mode'], $validated['source_type'], $language);
 
         $aiRuntimeEnabled = (bool) config('services.openai.exercise_runtime_enabled', false);
         $supportsAiGeneration = $aiRuntimeEnabled
@@ -373,19 +373,55 @@ class ExerciseController extends Controller
             && Schema::hasTable('attempt_answers');
     }
 
-    private function runtimeTitleForMode(string $mode, string $sourceType): string
+    private function runtimeTitleForMode(string $mode, string $sourceType, ?string $language = null): string
     {
-        $suffix = $sourceType === 'saved' ? 'Tus listas' : 'Catalogo';
+        $normalizedLanguage = is_string($language) && trim($language) !== ''
+            ? strtolower(trim($language))
+            : 'en';
+        $baseLanguage = explode('-', $normalizedLanguage)[0] ?? 'en';
+        $aliases = [
+            'gr' => 'el',
+            'dk' => 'da',
+            'ua' => 'uk',
+            'no' => 'nb',
+        ];
+        $resolvedLanguage = $aliases[$baseLanguage] ?? $baseLanguage;
 
-        return match ($mode) {
-            'reading' => 'Reading Exam Practice · ' . $suffix,
-            'listening' => 'Listening Exam Practice · ' . $suffix,
-            'speaking' => 'Speaking Exam Practice · ' . $suffix,
-            'writing' => 'Writing Exam Practice · ' . $suffix,
-            'flashcards' => 'Lexical Recall Drill · ' . $suffix,
-            'matching' => 'Collocation Match Drill · ' . $suffix,
-            default => 'Cambridge Challenge · ' . $suffix,
+        $labelsByLanguage = [
+            'en' => ['Reading', 'Listening', 'Speaking', 'Writing', 'Flashcards', 'Matching', 'Challenge', 'Your lists', 'Catalog'],
+            'es' => ['Lectura', 'Escucha', 'Habla', 'Escritura', 'Tarjetas', 'Emparejar', 'Desafio', 'Tus listas', 'Catalogo'],
+            'fr' => ['Lecture', 'Écoute', 'Expression', 'Écriture', 'Cartes', 'Association', 'Défi', 'Vos listes', 'Catalogue'],
+            'de' => ['Lesen', 'Hören', 'Sprechen', 'Schreiben', 'Karten', 'Zuordnen', 'Challenge', 'Deine Listen', 'Katalog'],
+            'it' => ['Lettura', 'Ascolto', 'Parlato', 'Scrittura', 'Flashcard', 'Abbinamento', 'Sfida', 'Le tue liste', 'Catalogo'],
+            'pt' => ['Leitura', 'Escuta', 'Fala', 'Escrita', 'Cartões', 'Correspondência', 'Desafio', 'Suas listas', 'Catálogo'],
+            'hi' => ['पठन', 'श्रवण', 'बोलना', 'लेखन', 'फ्लैशकार्ड', 'मिलान', 'चुनौती', 'आपकी सूचियाँ', 'कैटलॉग'],
+            'el' => ['Ανάγνωση', 'Ακρόαση', 'Ομιλία', 'Γραφή', 'Κάρτες', 'Αντιστοίχιση', 'Πρόκληση', 'Οι λίστες σας', 'Κατάλογος'],
+            'bg' => ['Четене', 'Слушане', 'Говорене', 'Писане', 'Карти', 'Сдвояване', 'Предизвикателство', 'Вашите списъци', 'Каталог'],
+            'ro' => ['Citire', 'Ascultare', 'Vorbire', 'Scriere', 'Carduri', 'Potrivire', 'Provocare', 'Listele tale', 'Catalog'],
+            'ru' => ['Чтение', 'Аудирование', 'Говорение', 'Письмо', 'Карточки', 'Сопоставление', 'Челлендж', 'Ваши списки', 'Каталог'],
+            'zh' => ['阅读', '听力', '口语', '写作', '闪卡', '配对', '挑战', '你的列表', '目录'],
+            'ko' => ['읽기', '듣기', '말하기', '쓰기', '플래시카드', '매칭', '챌린지', '내 목록', '카탈로그'],
+            'ja' => ['読解', 'リスニング', 'スピーキング', 'ライティング', 'フラッシュカード', 'マッチング', 'チャレンジ', 'あなたのリスト', 'カタログ'],
+            'tr' => ['Okuma', 'Dinleme', 'Konuşma', 'Yazma', 'Kartlar', 'Eşleştirme', 'Meydan Okuma', 'Listelerin', 'Katalog'],
+            'ar' => ['قراءة', 'استماع', 'تحدث', 'كتابة', 'بطاقات', 'مطابقة', 'تحدي', 'قوائمك', 'الكتالوج'],
+        ];
+
+        $labels = $labelsByLanguage[$resolvedLanguage]
+            ?? $labelsByLanguage['en'];
+
+        $suffix = $sourceType === 'saved' ? $labels[7] : $labels[8];
+
+        $modeLabel = match ($mode) {
+            'reading' => $labels[0],
+            'listening' => $labels[1],
+            'speaking' => $labels[2],
+            'writing' => $labels[3],
+            'flashcards' => $labels[4],
+            'matching' => $labels[5],
+            default => $labels[6],
         };
+
+        return $modeLabel . ' · ' . $suffix;
     }
 
     private function savedVocabularyItems(int $userId, ?string $sourceId, ?string $language, string $preferredTranslationLanguage): array

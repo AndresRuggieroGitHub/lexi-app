@@ -97,18 +97,29 @@ class AiExerciseGenerator
     private function buildPrompt(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage, ?string $targetCefrLevel, string $qualityProfile = 'default'): string
     {
         $sample = array_slice($sourceItems, 0, 24);
+        $normalizedLearningLanguage = is_string($learningLanguage) && trim($learningLanguage) !== ''
+            ? strtolower(trim($learningLanguage))
+            : 'en';
+        $languageDescriptor = $this->languageDescriptor($normalizedLearningLanguage);
+        $allowEnglishOutput = $normalizedLearningLanguage === 'en';
 
         return json_encode([
             'task' => 'Generate professional language-learning exercises for one mode.',
             'mode' => $mode,
             'source_type' => $sourceType,
             'learning_language' => $learningLanguage,
+            'learning_language_name' => $languageDescriptor['name'],
+            'learning_language_code_normalized' => $languageDescriptor['code'],
             'native_language' => $nativeLanguage,
             'target_cefr_level' => $targetCefrLevel,
             'quality_profile' => $qualityProfile,
             'rules' => [
                 'Use only words from source_items for options/answers in learning language.',
                 'Avoid mixing scripts/languages in options.',
+                'Write title, passage, question, prompt, transcript, sentence, and hints in learning_language only.',
+                $allowEnglishOutput
+                    ? 'English output is allowed because learning_language is en.'
+                    : 'Do NOT output English text unless it appears inside a source item that is already in learning_language.',
                 'Adapt lexical and grammatical complexity to target_cefr_level when provided.',
                 'Return 3-5 items.',
                 'Output JSON with {title, items}.',
@@ -126,6 +137,11 @@ class AiExerciseGenerator
     private function buildRescuePrompt(string $mode, array $sourceItems, string $sourceType, ?string $learningLanguage, ?string $nativeLanguage, ?string $targetCefrLevel): string
     {
         $sample = array_slice($sourceItems, 0, 36);
+        $normalizedLearningLanguage = is_string($learningLanguage) && trim($learningLanguage) !== ''
+            ? strtolower(trim($learningLanguage))
+            : 'en';
+        $languageDescriptor = $this->languageDescriptor($normalizedLearningLanguage);
+        $allowEnglishOutput = $normalizedLearningLanguage === 'en';
         $allowedWords = collect($sample)
             ->pluck('text')
             ->filter(fn ($word) => is_string($word) && trim($word) !== '')
@@ -138,17 +154,71 @@ class AiExerciseGenerator
             'mode' => $mode,
             'source_type' => $sourceType,
             'learning_language' => $learningLanguage,
+            'learning_language_name' => $languageDescriptor['name'],
+            'learning_language_code_normalized' => $languageDescriptor['code'],
             'native_language' => $nativeLanguage,
             'target_cefr_level' => $targetCefrLevel,
             'allowed_words_exact' => $allowedWords,
             'hard_constraints' => [
                 'Use exact spellings from allowed_words_exact for answers and options in learning language.',
+                'All natural-language fields (title, passage, question, prompt, transcript, sentence, hint) must be in learning_language.',
+                $allowEnglishOutput
+                    ? 'English output is allowed because learning_language is en.'
+                    : 'Do NOT output English text unless it is part of source vocabulary in learning_language.',
                 'For reading MCQ, include 3-4 options and one correct index.',
                 'Return 3-5 items.',
                 'Do not include markdown or explanation text around JSON.',
             ],
             'source_items' => $sample,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function languageDescriptor(string $languageCode): array
+    {
+        $normalized = strtolower(trim($languageCode));
+        $aliases = [
+            'gr' => 'el',
+            'dk' => 'da',
+            'ua' => 'uk',
+            'no' => 'nb',
+        ];
+        $canonical = $aliases[$normalized] ?? $normalized;
+
+        $names = [
+            'en' => 'English',
+            'es' => 'Spanish',
+            'fr' => 'French',
+            'de' => 'German',
+            'it' => 'Italian',
+            'pt' => 'Portuguese',
+            'hi' => 'Hindi',
+            'el' => 'Greek',
+            'bg' => 'Bulgarian',
+            'ro' => 'Romanian',
+            'ru' => 'Russian',
+            'zh' => 'Chinese',
+            'ja' => 'Japanese',
+            'ko' => 'Korean',
+            'ar' => 'Arabic',
+            'he' => 'Hebrew',
+            'tr' => 'Turkish',
+            'id' => 'Indonesian',
+            'vi' => 'Vietnamese',
+            'th' => 'Thai',
+            'cs' => 'Czech',
+            'sk' => 'Slovak',
+            'hu' => 'Hungarian',
+            'sv' => 'Swedish',
+            'da' => 'Danish',
+            'nb' => 'Norwegian Bokmal',
+            'fi' => 'Finnish',
+            'uk' => 'Ukrainian',
+        ];
+
+        return [
+            'code' => $canonical,
+            'name' => $names[$canonical] ?? strtoupper($canonical),
+        ];
     }
 
     private function passesQualityGate(string $mode, array $items, array $sourceItems, string $qualityProfile): bool
