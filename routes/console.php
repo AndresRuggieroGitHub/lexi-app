@@ -19,24 +19,31 @@ Artisan::command('lexi:warm-ui-locales {locale?*} {--force}', function () {
 
     $generated = 0;
     $skipped = 0;
+    $failed = 0;
 
     foreach ($locales as $locale) {
         if (! is_string($locale) || $locale === '') {
             continue;
         }
 
-        if ($catalog->warmLocale($locale, (bool) $this->option('force'))) {
-            $generated++;
-            $this->info('Generated UI catalog for [' . $locale . '].');
+        try {
+            if ($catalog->warmLocale($locale, (bool) $this->option('force'))) {
+                $generated++;
+                $this->info('Generated UI catalog for [' . $locale . '].');
 
-            continue;
+                continue;
+            }
+
+            $skipped++;
+            $this->line('Skipped [' . $locale . '].');
+        } catch (\Throwable $exception) {
+            $failed++;
+            $this->error('Failed [' . $locale . ']: ' . $exception->getMessage());
         }
-
-        $skipped++;
-        $this->line('Skipped [' . $locale . '].');
     }
 
     $this->newLine();
     $this->comment('Generated: ' . $generated);
     $this->comment('Skipped: ' . $skipped);
+    $this->comment('Failed: ' . $failed);
 })->purpose('Pre-generate cached UI translation catalogs for Lexi locales');

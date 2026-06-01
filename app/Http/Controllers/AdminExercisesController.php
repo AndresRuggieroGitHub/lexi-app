@@ -173,6 +173,47 @@ class AdminExercisesController extends Controller
                 return $instance;
             });
 
+        $attemptAnswerStats = DB::table('attempt_answers')
+            ->select(
+                'attempt_id',
+                DB::raw('count(*) as answers_total'),
+                DB::raw('coalesce(sum(case when is_correct = 1 then 1 else 0 end), 0) as correct_answers_total')
+            )
+            ->groupBy('attempt_id');
+
+        $recentAttempts = DB::table('exercise_attempts')
+            ->join('exercises', 'exercises.id', '=', 'exercise_attempts.exercise_id')
+            ->leftJoin('users', 'users.id', '=', 'exercise_attempts.user_id')
+            ->leftJoinSub($attemptAnswerStats, 'attempt_answer_stats', fn ($join) => $join->on('exercise_attempts.id', '=', 'attempt_answer_stats.attempt_id'))
+            ->select(
+                'exercise_attempts.id',
+                'exercise_attempts.result_status',
+                'exercise_attempts.score',
+                'exercise_attempts.time_spent_seconds',
+                'exercise_attempts.created_at',
+                'exercise_attempts.completed_at',
+                'exercises.type as exercise_type',
+                'exercises.title as exercise_title',
+                'exercises.payload as exercise_payload',
+                'users.email as user_email',
+                'users.name as user_name',
+                'users.surname as user_surname',
+                DB::raw('coalesce(attempt_answer_stats.answers_total, 0) as answers_total'),
+                DB::raw('coalesce(attempt_answer_stats.correct_answers_total, 0) as correct_answers_total')
+            )
+            ->orderByDesc('exercise_attempts.id')
+            ->limit(25)
+            ->get()
+            ->map(function ($attempt) {
+                $payload = json_decode((string) ($attempt->exercise_payload ?? ''), true);
+                $attempt->source_type = is_array($payload) ? ($payload['source_type'] ?? null) : null;
+                $attempt->source_name = is_array($payload) ? ($payload['source_name'] ?? null) : null;
+                $attempt->item_count = is_array($payload) ? ($payload['item_count'] ?? null) : null;
+                $attempt->correct_count = is_array($payload) ? ($payload['correct_count'] ?? null) : null;
+
+                return $attempt;
+            });
+
         $answersTotal = (int) DB::table('attempt_answers')->count();
         $correctAnswersTotal = (int) DB::table('attempt_answers')->where('is_correct', true)->count();
         $accuracyRate = $answersTotal > 0 ? (int) round(($correctAnswersTotal / $answersTotal) * 100) : null;
@@ -183,6 +224,7 @@ class AdminExercisesController extends Controller
             'templateOptions' => $templateOptions,
             'templateItems' => $templateItems,
             'templateInstances' => $templateInstances,
+            'recentAttempts' => $recentAttempts,
             'filters' => ['q' => $search],
             'stats' => [
                 'published' => DB::table('exercises')->count(),

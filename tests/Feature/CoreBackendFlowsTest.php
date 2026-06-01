@@ -184,6 +184,38 @@ PHP);
         }
     }
 
+    public function test_cached_generated_catalog_supplements_native_locale_missing_keys(): void
+    {
+        $this->seedLanguages();
+
+        $catalogPath = storage_path('app/generated-ui-locales/supplements/ua.php');
+
+        File::ensureDirectoryExists(dirname($catalogPath));
+        File::put($catalogPath, <<<'PHP'
+<?php
+
+return [
+    'footer' => [
+        'exercise_modes' => 'Режими вправ (cached)',
+    ],
+];
+PHP);
+
+        $user = User::factory()->create([
+            'mother_tongue_code' => 'ua',
+        ]);
+
+        try {
+            $response = $this->actingAs($user)->get('/app.html');
+
+            $response->assertOk();
+            $response->assertSee('lang="ua"', false);
+            $response->assertSee('Режими вправ (cached)');
+        } finally {
+            File::delete($catalogPath);
+        }
+    }
+
     public function test_exercises_page_uses_translated_runtime_strings_for_user_locale(): void
     {
         $this->seedLanguages();

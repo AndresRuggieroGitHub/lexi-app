@@ -15,6 +15,9 @@ class GeneratedUiLocaleCatalog
     private const GROUP = 'lexi';
     private const CHUNK_SIZE = 40;
 
+    /** @var array<string, bool> */
+    private array $nativeMissingMemo = [];
+
     public function __construct(
         private readonly Translator $translator,
     ) {
@@ -28,26 +31,36 @@ class GeneratedUiLocaleCatalog
 
     public function loadLocale(string $locale): void
     {
-        if (! $this->supportsUiLocale($locale) || $this->hasNativeCatalog($locale)) {
+        if (! $this->supportsUiLocale($locale)) {
             return;
         }
 
         $lines = $this->loadCachedCatalog($locale);
 
-        if ($lines === null) {
-            Log::info('Lexi UI locale cache missing; skipping runtime generation.', [
-                'locale' => $locale,
-            ]);
-
-            return;
+        if ($lines === null && $this->shouldWarmAtRuntime($locale)) {
+            try {
+                $this->warmLocale($locale);
+                $lines = $this->loadCachedCatalog($locale);
+            } catch (Throwable $exception) {
+                Log::warning('Lexi UI locale runtime warmup failed.', [
+                    'locale' => $locale,
+                    'message' => $exception->getMessage(),
+                ]);
+            }
         }
 
-        $this->translator->addLines($this->flattenCatalog($lines), $locale);
+        if (is_array($lines) && $lines !== []) {
+            $effectiveLines = $this->hasNativeCatalog($locale)
+                ? array_replace_recursive($this->nativeCatalog($locale), $lines)
+                : $lines;
+
+            $this->translator->addLines($this->flattenCatalog($effectiveLines), $locale);
+        }
     }
 
     public function warmLocale(string $locale, bool $force = false): bool
     {
-        if (! $this->supportsUiLocale($locale) || $this->hasNativeCatalog($locale)) {
+        if (! $this->supportsUiLocale($locale)) {
             return false;
         }
 
@@ -55,7 +68,13 @@ class GeneratedUiLocaleCatalog
             return false;
         }
 
-        $this->storeCachedCatalog($locale, $this->generateCatalog($locale));
+        $catalog = $this->generateCatalog($locale);
+
+        if ($catalog === []) {
+            return false;
+        }
+
+        $this->storeCachedCatalog($locale, $catalog);
 
         return true;
     }
@@ -67,7 +86,16 @@ class GeneratedUiLocaleCatalog
 
     public function generatedCatalogPath(string $locale): string
     {
-        return storage_path('app/generated-ui-locales/' . $locale . '.php');
+        $prefix = $this->isNativeLocale($locale)
+            ? 'app/generated-ui-locales/supplements/'
+            : 'app/generated-ui-locales/';
+
+        return storage_path($prefix . $locale . '.php');
+    }
+
+    private function isNativeLocale(string $locale): bool
+    {
+        return $this->hasNativeCatalog($locale);
     }
 
     private function hasNativeCatalog(string $locale): bool
@@ -98,11 +126,21 @@ class GeneratedUiLocaleCatalog
 
     private function generateCatalog(string $locale): array
     {
-        /** @var array<string, mixed> $source */
-        $source = require lang_path('en/' . self::GROUP . '.php');
+        $sourceFlat = Arr::dot($this->sourceCatalog());
+
+        if ($this->hasNativeCatalog($locale)) {
+            $nativeFlat = Arr::dot($this->nativeCatalog($locale));
+            /** @var array<string, mixed> $sourceFlat */
+            $sourceFlat = array_diff_key($sourceFlat, $nativeFlat);
+        }
+
+        if ($sourceFlat === []) {
+            return [];
+        }
 
         $targetLocale = $this->translateLocale($locale);
-        $flatSource = collect(Arr::dot($source));
+        $flatSource = collect($sourceFlat)
+            ->mapWithKeys(fn (mixed $value, string $key): array => [$key => (string) $value]);
         $translated = [];
 
         $flatSource
@@ -112,6 +150,55 @@ class GeneratedUiLocaleCatalog
             });
 
         return Arr::undot($translated);
+    }
+
+    private function shouldWarmAtRuntime(string $locale): bool
+    {
+        if (! $this->supportsUiLocale($locale)) {
+            return false;
+        }
+
+        if (! $this->hasNativeCatalog($locale)) {
+            return true;
+        }
+
+        if (array_key_exists($locale, $this->nativeMissingMemo)) {
+            return $this->nativeMissingMemo[$locale];
+        }
+
+        $sourceFlat = Arr::dot($this->sourceCatalog());
+        $nativeFlat = Arr::dot($this->nativeCatalog($locale));
+        $hasMissingKeys = array_diff_key($sourceFlat, $nativeFlat) !== [];
+        $this->nativeMissingMemo[$locale] = $hasMissingKeys;
+
+        return $hasMissingKeys;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function sourceCatalog(): array
+    {
+        /** @var array<string, mixed> $source */
+        $source = require lang_path('en/' . self::GROUP . '.php');
+
+        return $source;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function nativeCatalog(string $locale): array
+    {
+        $path = lang_path($locale . '/' . self::GROUP . '.php');
+
+        if (! File::exists($path)) {
+            return [];
+        }
+
+        $catalog = require $path;
+
+        return is_array($catalog) ? $catalog : [];
     }
 
     /**
@@ -174,7 +261,6 @@ class GeneratedUiLocaleCatalog
             ])
             ->preserveParameters();
 
-        $separator = ':lexiBoundary' . $chunkIndex;
         $tokenMaps = [];
         $maskedValues = [];
 
@@ -184,11 +270,10 @@ class GeneratedUiLocaleCatalog
             $tokenMaps[$key] = $tokens;
         }
 
-        $translatedJoined = $translator->translate(implode("\n{$separator}\n", $maskedValues));
-        $translatedValues = explode("\n{$separator}\n", $translatedJoined);
+        $translatedValues = [];
 
-        if (count($translatedValues) !== count($maskedValues)) {
-            throw new \RuntimeException('Translated UI locale chunk could not be split safely.');
+        foreach ($maskedValues as $maskedValue) {
+            $translatedValues[] = $translator->translate($maskedValue);
         }
 
         $restored = [];

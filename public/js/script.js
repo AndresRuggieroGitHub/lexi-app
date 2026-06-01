@@ -2696,8 +2696,10 @@
         const recentWords = state?.summary?.recent_words || [];
         const activeLanguage = LANG_CONFIG[state?.active_language?.code]?.label || state?.active_language?.label || "?";
         const recentWordsList = document.getElementById("recentWordsList");
+        const numberFormatter = new Intl.NumberFormat(document.documentElement.lang || undefined);
+        const formatCount = (value) => numberFormatter.format(Number(value) || 0);
 
-        document.getElementById("streakNum").textContent = streak;
+        document.getElementById("streakNum").textContent = formatCount(streak);
         document.getElementById("streakFire").textContent = streak > 0 ? "🔥" : "🌱";
         document.getElementById("streakMsg").textContent = streak > 1
           ? t("js.progress.streak_message_many", { count: streak })
@@ -2705,21 +2707,21 @@
           ? t("js.progress.streak_message_one")
           : t("js.progress.streak_message_zero");
 
-        document.getElementById("statWords").textContent = totalWords;
-        document.getElementById("statExDone").textContent = state?.exercises?.total_completed || 0;
+        document.getElementById("statWords").textContent = formatCount(totalWords);
+        document.getElementById("statExDone").textContent = formatCount(state?.exercises?.total_completed || 0);
         document.getElementById("statLang").textContent = activeLanguage;
         document.getElementById("levelBadge").textContent = level.label || "A1";
         document.getElementById("levelBadge").className = `profile-level-badge cefr-${level.key || "a1"}`;
         document.getElementById("levelBar").style.width = `${level.progress_percent || 0}%`;
         document.getElementById("levelNext").textContent = level.next_target
-          ? `${level.current_words || 0} / ${level.next_target} ${t("js.progress.saved_word_other")} ${level.next_label || "" ? `para ${level.next_label || ""}` : ""}`
+          ? `${formatCount(level.current_words || 0)} / ${formatCount(level.next_target)} ${t("js.progress.saved_word_other")} ${level.next_label || "" ? `para ${level.next_label || ""}` : ""}`
           : t("js.progress.max_level_reached");
 
-        document.getElementById("modeReading").textContent = state?.exercises?.modes?.reading || 0;
-        document.getElementById("modeListening").textContent = state?.exercises?.modes?.listening || 0;
-        document.getElementById("modeSpeaking").textContent = state?.exercises?.modes?.speaking || 0;
-        document.getElementById("modeWriting").textContent = state?.exercises?.modes?.writing || 0;
-        document.getElementById("modeMix").textContent = state?.exercises?.modes?.mix || 0;
+        document.getElementById("modeReading").textContent = formatCount(state?.exercises?.modes?.reading || 0);
+        document.getElementById("modeListening").textContent = formatCount(state?.exercises?.modes?.listening || 0);
+        document.getElementById("modeSpeaking").textContent = formatCount(state?.exercises?.modes?.speaking || 0);
+        document.getElementById("modeWriting").textContent = formatCount(state?.exercises?.modes?.writing || 0);
+        document.getElementById("modeMix").textContent = formatCount(state?.exercises?.modes?.mix || 0);
 
         if (recentWordsList) {
           recentWordsList.innerHTML = "";

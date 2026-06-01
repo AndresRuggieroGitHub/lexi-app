@@ -29,6 +29,7 @@ class ProgressController extends Controller
     private function buildState(User $user, string $activeLanguage): array
     {
         $languageNames = Language::query()->pluck('name', 'code')->all();
+        $nativeLanguage = $user->mother_tongue_code ?: 'es';
 
         $userWords = UserWord::query()
             ->with(['word.category', 'word.translations.targetWord'])
@@ -55,14 +56,26 @@ class ProgressController extends Controller
             ->values()
             ->all();
 
-        $recentWords = $userWords->take(6)->map(function (UserWord $userWord) {
+        $recentSourceWords = $userWords
+            ->filter(function (UserWord $userWord) use ($activeLanguage) {
+                return $userWord->word?->language_code === $activeLanguage;
+            });
+
+        if ($recentSourceWords->isEmpty()) {
+            $recentSourceWords = $userWords;
+        }
+
+        $recentWords = $recentSourceWords->take(6)->map(function (UserWord $userWord) use ($nativeLanguage) {
             $word = $userWord->word;
+            $preferredTranslation = $word?->translations?->first(function ($translation) use ($nativeLanguage) {
+                return $translation->targetWord?->language_code === $nativeLanguage;
+            });
 
             return [
                 'id' => $word?->client_key,
                 'label' => $word?->text,
                 'language' => $word?->language_code,
-                'translation' => $word?->translations->first()?->targetWord?->text,
+                'translation' => $preferredTranslation?->targetWord?->text,
                 'cefr' => $word?->cefr_level,
                 'topic' => $word?->category?->name,
             ];

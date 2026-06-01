@@ -27,6 +27,10 @@
             <select id="exerciseCollectionSelect" class="exercise-list-picker__select"></select>
           </div>
         </div>
+        <div class="exercise-source-notice" id="exerciseSourceNotice" hidden aria-live="polite">
+          <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+          <span id="exerciseSourceNoticeText"></span>
+        </div>
       </div>
     </div>
     <section class="exercise-grid">
@@ -155,7 +159,7 @@
   const CEFR_LEVELS = Array.isArray(SHARED_CEFR_LEVELS) && SHARED_CEFR_LEVELS.length ? SHARED_CEFR_LEVELS : ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   let serverVocabularyState = { library: { id: 'library', name: t('saved_name'), items: [] }, collections: [], catalog: [] };
   let serverVocabularyLanguage = null;
-  let exerciseSourceSwitchInFlight = false;
+  let exerciseSourceSwitchToken = 0;
 
   function setExerciseCollectionsLoading(isLoading, message = t('loading_options')) {
     const select = document.getElementById('exerciseCollectionSelect');
@@ -163,20 +167,21 @@
     const topicSelect = document.getElementById('exerciseCatalogTopicSelect');
     const loading = document.getElementById('exerciseSourceLoading');
     const loadingText = document.getElementById('exerciseSourceLoadingText');
-    if (!select) return;
 
     if (loading) loading.hidden = !isLoading;
     if (loadingText) loadingText.textContent = message;
 
     if (isLoading) {
-      select.innerHTML = '<option selected disabled>' + t('loading_lists') + '</option>';
-      select.disabled = true;
+      if (select) {
+        select.innerHTML = '<option selected disabled>' + t('loading_lists') + '</option>';
+        select.disabled = true;
+      }
       if (levelSelect) levelSelect.disabled = true;
       if (topicSelect) topicSelect.disabled = true;
       return;
     }
 
-    select.disabled = false;
+    if (select) select.disabled = false;
     if (levelSelect) levelSelect.disabled = false;
     if (topicSelect) topicSelect.disabled = false;
   }
@@ -446,31 +451,147 @@
     });
   }
 
-  function setupExerciseSourceTabs() {
+  function setExerciseSourceSwitching(isSwitching, sourceType = getSelectedSourceType()) {
     document.querySelectorAll('[data-source-tab]').forEach(button => {
-      button.addEventListener('click', async () => {
-        if (exerciseSourceSwitchInFlight) return;
-        exerciseSourceSwitchInFlight = true;
-        const nextSource = button.dataset.sourceTab;
-        const currentSource = getSelectedSourceType();
-        localStorage.setItem(EXERCISE_SOURCE_KEY, nextSource);
-        if (nextSource === 'saved' && !localStorage.getItem(EXERCISE_COLLECTION_KEY)) {
-          localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
-        }
-        try {
-          if (nextSource !== currentSource) {
-            await loadVocabularySources(nextSource === 'saved' ? t('loading_saved_lists') : t('loading_catalog'), true);
-          }
-          syncSourcePanels();
-          setupExerciseCatalogSelects();
-          setupExerciseCollectionSelect();
-        } finally {
-          exerciseSourceSwitchInFlight = false;
-        }
-      });
+      button.disabled = isSwitching;
+      button.classList.toggle('is-loading', isSwitching && button.dataset.sourceTab === sourceType);
     });
 
+    if (isSwitching) {
+      const message = sourceType === 'saved'
+        ? tx('loading_saved_lists', 'Cargando tus listas...')
+        : tx('loading_catalog', 'Cargando catalogo...');
+      setExerciseCollectionsLoading(true, message);
+    } else {
+      setExerciseCollectionsLoading(false);
+    }
+  }
+
+  function setExerciseSourceNotice(message = '') {
+    const notice = document.getElementById('exerciseSourceNotice');
+    const noticeText = document.getElementById('exerciseSourceNoticeText');
+
+    if (!notice || !noticeText) return;
+
+    const hasMessage = String(message || '').trim() !== '';
+    notice.hidden = !hasMessage;
+    noticeText.textContent = hasMessage ? String(message) : '';
+  }
+
+  function setExerciseCardEnabled(mode, isEnabled) {
+    const card = document.querySelector('.exercise-card[data-mode="' + mode + '"]');
+    if (!card) return;
+
+    card.classList.toggle('is-disabled', !isEnabled);
+    card.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
+    card.tabIndex = isEnabled ? 0 : -1;
+  }
+
+  function getSourceModeAvailability() {
+    const sourceType = getSelectedSourceType();
+    const source = getSelectedVocabularySource();
+    const count = Array.isArray(source?.items) ? source.items.length : 0;
+    const modeAvailability = {
+      reading: count > 0,
+      listening: count > 0,
+      speaking: count > 0,
+      writing: count > 0,
+      mix: count > 0,
+    };
+
+    if (sourceType === 'saved' && count > 0 && count < 4) {
+      modeAvailability.mix = false;
+    }
+
+    return { sourceType, count, modeAvailability };
+  }
+
+  function updateExerciseSourceEligibility(mode = null) {
+    const { sourceType, count, modeAvailability } = getSourceModeAvailability();
+
+    Object.entries(modeAvailability).forEach(([modeKey, isEnabled]) => {
+      setExerciseCardEnabled(modeKey, isEnabled);
+    });
+
+    if (count <= 0) {
+      if (sourceType === 'saved') {
+        setExerciseSourceNotice(tx('source_saved_empty', 'Esta lista no tiene palabras. Añade vocabulario para practicar.'));
+      } else {
+        setExerciseSourceNotice(tx('source_catalog_empty', 'No hay palabras para los filtros actuales de Catalogo.'));
+      }
+    } else if (sourceType === 'saved' && count < 4) {
+      setExerciseSourceNotice(tx('mix_needs_four_words', 'Desafio se activa cuando esta lista tenga al menos 4 palabras.'));
+    } else {
+      setExerciseSourceNotice('');
+    }
+
+    if (mode) {
+      return Boolean(modeAvailability[mode]);
+    }
+
+    return Object.values(modeAvailability).some(Boolean);
+  }
+
+  function setupExerciseSourceTabs() {
+    const toggleRoot = document.querySelector('.exercise-source-toggle');
+    if (!toggleRoot || toggleRoot.dataset.bound === '1') {
+      syncSourcePanels();
+      updateExerciseSourceEligibility();
+      return;
+    }
+
+    const handleSourceTabClick = async (event) => {
+      const trigger = event.target.closest('[data-source-tab]');
+      if (!trigger || !toggleRoot.contains(trigger)) return;
+
+      event.preventDefault();
+
+      const nextSource = trigger.dataset.sourceTab;
+      if (!nextSource) return;
+
+      const currentSource = getSelectedSourceType();
+      localStorage.setItem(EXERCISE_SOURCE_KEY, nextSource);
+      if (nextSource === 'saved' && !localStorage.getItem(EXERCISE_COLLECTION_KEY)) {
+        localStorage.setItem(EXERCISE_COLLECTION_KEY, 'all_saved');
+      }
+
+      syncSourcePanels();
+
+      const requestToken = ++exerciseSourceSwitchToken;
+      setExerciseSourceSwitching(true, nextSource);
+
+      try {
+        if (nextSource !== currentSource) {
+          await loadVocabularySources(nextSource === 'saved' ? t('loading_saved_lists') : t('loading_catalog'), true);
+        }
+
+        if (requestToken !== exerciseSourceSwitchToken) {
+          return;
+        }
+
+        setupExerciseCatalogSelects();
+        setupExerciseCollectionSelect();
+        syncSourcePanels();
+        updateExerciseSourceEligibility();
+      } catch {
+        if (requestToken === exerciseSourceSwitchToken) {
+          setupExerciseCatalogSelects();
+          setupExerciseCollectionSelect();
+          syncSourcePanels();
+          updateExerciseSourceEligibility();
+        }
+      } finally {
+        if (requestToken === exerciseSourceSwitchToken) {
+          setExerciseSourceSwitching(false, nextSource);
+        }
+      }
+    };
+
+    toggleRoot.addEventListener('click', handleSourceTabClick);
+    toggleRoot.dataset.bound = '1';
+
     syncSourcePanels();
+    updateExerciseSourceEligibility();
   }
 
   function setupExerciseCatalogSelects() {
@@ -494,9 +615,11 @@
 
     levelSelect.onchange = () => {
       localStorage.setItem(EXERCISE_CATALOG_LEVEL_KEY, levelSelect.value);
+      updateExerciseSourceEligibility();
     };
     topicSelect.onchange = () => {
       localStorage.setItem(EXERCISE_CATALOG_TOPIC_KEY, topicSelect.value);
+      updateExerciseSourceEligibility();
     };
   }
 
@@ -521,6 +644,7 @@
 
     select.onchange = () => {
       localStorage.setItem(EXERCISE_COLLECTION_KEY, select.value);
+      updateExerciseSourceEligibility();
     };
   }
 
@@ -540,6 +664,7 @@
     setupExerciseCatalogSelects();
     setupExerciseCollectionSelect();
     syncSourcePanels();
+    updateExerciseSourceEligibility();
   }
 
   function resolveDifficultyLevel(source, items) {
@@ -639,9 +764,9 @@
       }));
   }
 
-  function buildCustomMixItems(items, difficultyLevel = 'B1') {
-    const matchingItems = buildCustomMatchingItems(items, difficultyLevel).slice(0, 1);
-    const memoryItems = buildCustomMemoryItems(items, difficultyLevel).slice(0, 1);
+  function buildCustomMixItems(items, difficultyLevel = 'B1', sourceType = 'catalog') {
+    const matchingItems = buildCustomMatchingItems(items, difficultyLevel, sourceType).slice(0, 1);
+    const memoryItems = buildCustomMemoryItems(items, difficultyLevel, sourceType).slice(0, 1);
 
     return [...matchingItems, ...memoryItems].filter(item => item && item.type);
   }
@@ -659,11 +784,32 @@
       }));
   }
 
-  function buildCustomMatchingItems(items, difficultyLevel = 'B1') {
-    const pairs = items
-      .filter(item => item.text && item.translation)
-      .slice(0, 12)
-      .map(item => ({ left: item.text, right: item.translation }));
+  function resolveSourceItemText(item) {
+    return String(item?.text || item?.word || item?.label || '').trim();
+  }
+
+  function resolveSourceItemTranslation(item) {
+    return String(item?.translation || item?.meaning || '').trim();
+  }
+
+  function collectSourcePairs(items) {
+    const seen = new Set();
+
+    return (items || [])
+      .map(item => ({ left: resolveSourceItemText(item), right: resolveSourceItemTranslation(item) }))
+      .filter(pair => pair.left && pair.right)
+      .filter(pair => {
+        const key = (pair.left + '::' + pair.right).toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
+  function buildCustomMatchingItems(items, difficultyLevel = 'B1', sourceType = 'catalog') {
+    const sourcePairs = collectSourcePairs(items);
+    const maxPairs = sourceType === 'saved' ? 8 : 12;
+    const pairs = sourcePairs.slice(0, maxPairs);
 
     if (pairs.length < 3) return [];
 
@@ -677,11 +823,12 @@
     }];
   }
 
-  function buildCustomMemoryItems(items, difficultyLevel = 'B1') {
-    const pairs = items
-      .filter(item => item.text && item.translation)
-      .slice(0, 18)
-      .map(item => ({ front: item.text, back: item.translation }));
+  function buildCustomMemoryItems(items, difficultyLevel = 'B1', sourceType = 'catalog') {
+    const sourcePairs = collectSourcePairs(items);
+    const maxPairs = sourceType === 'saved' ? 10 : 16;
+    const pairs = sourcePairs
+      .slice(0, maxPairs)
+      .map(pair => ({ front: pair.left, back: pair.right }));
 
     if (pairs.length < 4) return [];
 
@@ -997,14 +1144,14 @@
       base.title = getLocalizedModeTitle(mode);
     }
     const source = getSelectedVocabularySource();
-    const templateModeData = getTemplateModeData(mode);
+    const sourceType = getSelectedSourceType();
+    const templateModeData = sourceType === 'saved' ? null : getTemplateModeData(mode);
     const difficultyLevel = resolveDifficultyLevel(source, source.items || []);
 
-    if (templateModeData) {
-      return templateModeData;
-    }
-
     if (!source.items.length) {
+      if (templateModeData) {
+        return templateModeData;
+      }
       return { title: base.title, items: base.items };
     }
 
@@ -1037,7 +1184,7 @@
     }
 
     if (mode === 'mix') {
-      const customItems = buildCustomMixItems(source.items, difficultyLevel);
+      const customItems = buildCustomMixItems(source.items, difficultyLevel, sourceType);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
@@ -1051,10 +1198,14 @@
     }
 
     if (mode === 'matching') {
-      const customItems = buildCustomMatchingItems(source.items, difficultyLevel);
+      const customItems = buildCustomMatchingItems(source.items, difficultyLevel, sourceType);
       if (customItems.length) {
         return { title: base.title + ' · ' + source.name, items: customItems };
       }
+    }
+
+    if (templateModeData) {
+      return templateModeData;
     }
 
     return { title: base.title, items: base.items };
@@ -1093,9 +1244,7 @@
       const idx = BADGE_MODES.indexOf(card.dataset.mode);
       if (idx === -1) return;
       const badge = card.querySelector('.exercise-card-badge');
-      const label = card.querySelector('.exercise-card-label');
       if (badge) badge.textContent = labels[idx];
-      if (label) label.textContent = labels[idx];
     });
   }
 
@@ -1127,8 +1276,6 @@
       }
     }
   }
-
-  bootstrapExercises();
 
   const primeAudioOnInteraction = () => {
     primeUiAudio();
@@ -1445,9 +1592,16 @@
   }
 
   document.querySelectorAll('.exercise-card[data-mode]').forEach(card => {
-    card.addEventListener('click', () => openMode(card.dataset.mode));
+    card.addEventListener('click', () => {
+      if (card.classList.contains('is-disabled')) return;
+      openMode(card.dataset.mode);
+    });
     card.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMode(card.dataset.mode); }
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (card.classList.contains('is-disabled')) return;
+        openMode(card.dataset.mode);
+      }
     });
     card.style.cursor = 'pointer';
   });
@@ -1456,7 +1610,7 @@
   document.getElementById('btnNextEx').addEventListener('click', nextExercise);
 
   async function openMode(mode) {
-    if (exerciseSourceSwitchInFlight) {
+    if (!updateExerciseSourceEligibility(mode)) {
       return;
     }
 
@@ -1786,6 +1940,8 @@
       window.speechSynthesis.cancel();
     }
   }
+
+  bootstrapExercises();
 
   function parseReadingPassage(passage) {
     const raw = String(passage || '').trim();
